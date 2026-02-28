@@ -225,3 +225,38 @@ body {
   border-radius: 50%;
   box-shadow: 0 8px 20px rgba(0,0,0,0.08);
 }
+.map-controls button {
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: white;
+  color: #111827;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  /* Aici am adăugat tranziția fină pentru animație */
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+/* Animația efectivă la hover (identică cu Media Player) */
+.map-controls button:hover {
+  background: #f3f4f6;
+  transform: scale(1.1);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.map-controls button:active {
+  transform: scale(0.95); /* Efect de apăsare fizică */
+}
+button {
+  outline: none !important;
+}
+button:focus, button:active {
+  outline: none !important;
+}
