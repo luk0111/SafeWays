@@ -4,10 +4,10 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-public class SafewaysBackendApplication {
+public class SafewaysApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(SafewaysBackendApplication.class, args);
+		SpringApplication.run(SafewaysApplication.class, args);
 	}
 
 }
