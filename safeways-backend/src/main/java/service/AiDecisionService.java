@@ -1,4 +1,4 @@
-package com.smartcity.backend.service;
+package service;
 
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
