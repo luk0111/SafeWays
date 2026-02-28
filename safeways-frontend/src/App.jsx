@@ -67,7 +67,7 @@ function App() {
             {(isSettingsOpen || isClosing) && (
                 <div className={`mini-settings-menu ${isDarkMode ? 'dark-panel' : ''} ${isClosing ? 'closing' : ''}`}>
                     <div className="setting-row">
-                        <span>Tema Întunecată</span>
+                        <span>Dark Mode</span>
                         <label className="switch">
                             <input
                                 type="checkbox"
