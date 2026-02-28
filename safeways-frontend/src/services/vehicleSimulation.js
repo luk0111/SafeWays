@@ -9,7 +9,15 @@ export class VehicleSimulation {
         this.lastLeftSpawnIndex = 0;
         this.lastRightSpawnIndex = 0;
         this.spawnDirection = 0;
+        this.speedLimit = 50; // km/h speed limit
+        this.nextSpeedingTime = this.getRandomSpeedingInterval();
+        this.lastUpdateTime = Date.now();
         this.buildGraph();
+    }
+
+    // Get random interval between 5-10 seconds (in milliseconds)
+    getRandomSpeedingInterval() {
+        return 5000 + Math.random() * 5000;
     }
 
     buildGraph() {
@@ -173,6 +181,7 @@ export class VehicleSimulation {
             path: path,
             pathIndex: 0,
             speed: 0.00000015 + Math.random() * 0.00000008,
+            speedKmH: 30 + Math.random() * 20, // Normal speed: 30-50 km/h
             rotation: targetRotation,
             targetRotation: targetRotation,
             isCurrentUser: false,
@@ -207,6 +216,14 @@ export class VehicleSimulation {
 
     update(deltaTime) {
         const dt = Math.min(deltaTime, 50);
+        const currentTime = Date.now();
+
+        // Check if it's time to generate a random speeding vehicle
+        if (currentTime - this.lastUpdateTime >= this.nextSpeedingTime) {
+            this.generateRandomSpeeder();
+            this.lastUpdateTime = currentTime;
+            this.nextSpeedingTime = this.getRandomSpeedingInterval();
+        }
 
         this.vehicles.forEach(vehicle => {
             if (!vehicle.active) return;
@@ -244,8 +261,12 @@ export class VehicleSimulation {
                     vehicle.targetRotation = this.calculateRotation(currentNode.longitude, currentNode.latitude, nextNode.longitude, nextNode.latitude);
                 }
             } else {
-                const moveX = (dx / dist) * vehicle.speed * dt;
-                const moveY = (dy / dist) * vehicle.speed * dt;
+                // Speed multiplier based on speedKmH (base speed is calibrated for ~40 km/h)
+                const speedMultiplier = vehicle.speedKmH / 40;
+                const actualSpeed = vehicle.speed * speedMultiplier;
+
+                const moveX = (dx / dist) * actualSpeed * dt;
+                const moveY = (dy / dist) * actualSpeed * dt;
 
                 vehicle.x += moveX;
                 vehicle.y += moveY;
@@ -255,6 +276,20 @@ export class VehicleSimulation {
         this.vehicles = this.vehicles.filter(v => v.active);
     }
 
+    // Randomly make a vehicle speed over the limit
+    generateRandomSpeeder() {
+        const activeVehicles = this.vehicles.filter(v => v.active && v.speedKmH <= this.speedLimit);
+        if (activeVehicles.length === 0) return;
+
+        // Pick a random vehicle to make it speed
+        const randomIndex = Math.floor(Math.random() * activeVehicles.length);
+        const vehicle = activeVehicles[randomIndex];
+
+        // Set speed to 51-80 km/h (over the 50 km/h limit)
+        vehicle.speedKmH = 51 + Math.random() * 29;
+        console.log(`⚠️ Vehicle ${vehicle.id} is now speeding at ${Math.round(vehicle.speedKmH)} km/h!`);
+    }
+
     getVehicles() {
         return this.vehicles.map(v => ({
             id: v.id,
@@ -262,7 +297,7 @@ export class VehicleSimulation {
             y: v.y,
             rotation: v.rotation,
             isCurrentUser: v.isCurrentUser,
-            speed: v.speed,
+            speed: v.speedKmH, // Return speedKmH as speed for rendering
             direction: v.direction
         }));
     }

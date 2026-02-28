@@ -32,6 +32,12 @@ public class VehicleSimulationService {
     private int spawnDirection = 0;
     private long lastUpdateTime = System.currentTimeMillis();
     private long lastSpawnTime = 0;
+    private long lastSpeedingTime = 0;
+    private long nextSpeedingInterval = getRandomSpeedingInterval();
+
+    // Speed limit in km/h
+    private static final double SPEED_LIMIT = 50.0;
+    private static final Random random = new Random();
 
     @PostConstruct
     public void init() {
@@ -210,6 +216,7 @@ public class VehicleSimulationService {
         vehicle.path = path;
         vehicle.pathIndex = 0;
         vehicle.speed = 0.00000015 + Math.random() * 0.00000008;
+        vehicle.speedKmH = 30 + Math.random() * 20; // Normal speed: 30-50 km/h
         vehicle.rotation = targetRotation;
         vehicle.targetRotation = targetRotation;
         vehicle.active = true;
@@ -262,6 +269,13 @@ public class VehicleSimulationService {
 
         double dt = Math.min(deltaTime, 50);
 
+        // Check if it's time to generate a random speeding vehicle (every 5-10 seconds)
+        if (currentTime - lastSpeedingTime >= nextSpeedingInterval) {
+            generateRandomSpeeder();
+            lastSpeedingTime = currentTime;
+            nextSpeedingInterval = getRandomSpeedingInterval();
+        }
+
         Iterator<SimulatedVehicle> iterator = vehicles.iterator();
         while (iterator.hasNext()) {
             SimulatedVehicle vehicle = iterator.next();
@@ -302,8 +316,12 @@ public class VehicleSimulationService {
                                                                 nextNode.getLongitude(), nextNode.getLatitude());
                 }
             } else {
-                double moveX = (dx / dist) * vehicle.speed * dt;
-                double moveY = (dy / dist) * vehicle.speed * dt;
+                // Speed multiplier based on speedKmH (base speed is calibrated for ~40 km/h)
+                double speedMultiplier = vehicle.speedKmH / 40.0;
+                double actualSpeed = vehicle.speed * speedMultiplier;
+
+                double moveX = (dx / dist) * actualSpeed * dt;
+                double moveY = (dy / dist) * actualSpeed * dt;
                 vehicle.x += moveX;
                 vehicle.y += moveY;
             }
@@ -317,6 +335,34 @@ public class VehicleSimulationService {
         messagingTemplate.convertAndSend("/topic/vehicles", getVehicleStates());
     }
 
+    /**
+     * Get random interval between 5-10 seconds (in milliseconds)
+     */
+    private long getRandomSpeedingInterval() {
+        return 5000 + random.nextInt(5000);
+    }
+
+    /**
+     * Randomly make a vehicle speed over the limit
+     */
+    private void generateRandomSpeeder() {
+        List<SimulatedVehicle> eligibleVehicles = new ArrayList<>();
+        for (SimulatedVehicle v : vehicles) {
+            if (v.active && v.speedKmH <= SPEED_LIMIT) {
+                eligibleVehicles.add(v);
+            }
+        }
+
+        if (eligibleVehicles.isEmpty()) return;
+
+        // Pick a random vehicle to make it speed
+        SimulatedVehicle vehicle = eligibleVehicles.get(random.nextInt(eligibleVehicles.size()));
+
+        // Set speed to 51-80 km/h (over the 50 km/h limit)
+        vehicle.speedKmH = 51 + random.nextDouble() * 29;
+        System.out.println("⚠️ Vehicle " + vehicle.id + " is now speeding at " + Math.round(vehicle.speedKmH) + " km/h!");
+    }
+
     public List<Map<String, Object>> getVehicleStates() {
         List<Map<String, Object>> result = new ArrayList<>();
         for (SimulatedVehicle v : vehicles) {
@@ -325,7 +371,9 @@ public class VehicleSimulationService {
             state.put("x", v.x);
             state.put("y", v.y);
             state.put("rotation", v.rotation);
-            state.put("speed", v.speed);
+            state.put("speed", v.speedKmH); // Return speedKmH for display
+            state.put("speedKmH", v.speedKmH);
+            state.put("isSpeeding", v.speedKmH > SPEED_LIMIT);
             state.put("isCurrentUser", false);
             result.add(state);
         }
@@ -350,6 +398,7 @@ public class VehicleSimulationService {
         List<String> path;
         int pathIndex;
         double speed;
+        double speedKmH; // Speed in km/h for display and speeding detection
         double rotation;
         double targetRotation;
         boolean active;

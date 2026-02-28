@@ -173,11 +173,29 @@ function getFallbackBrasovData() {
             longitude: nodes[nodeId].longitude
         }));
 
+    // Find the most central intersection (most connections)
+    let centralNodeId = 'n1';
+    let maxConnections = 0;
+    Object.keys(nodeConnections).forEach(nodeId => {
+        if (nodeConnections[nodeId] > maxConnections && nodes[nodeId]) {
+            maxConnections = nodeConnections[nodeId];
+            centralNodeId = nodeId;
+        }
+    });
+
+    const centralAntenna = {
+        id: 'antenna_main',
+        latitude: nodes[centralNodeId].latitude,
+        longitude: nodes[centralNodeId].longitude,
+        nodeId: centralNodeId
+    };
+
     return {
         nodes: Object.values(nodes),
         arcs,
         intersections,
         nodesDict: nodes,
+        centralAntenna,
         source: 'Fallback - Brasov Historic Center'
     };
 }

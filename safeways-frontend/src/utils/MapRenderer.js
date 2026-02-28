@@ -587,6 +587,46 @@ export class MapRenderer {
             });
         }
 
+        // 4a. CENTRAL ANTENNA SPHERE (always green, larger than vehicle spheres)
+        const antenna = mapData.centralAntenna;
+        if (antenna && typeof antenna.longitude === 'number' && typeof antenna.latitude === 'number') {
+            const antennaX = getX(antenna.longitude);
+            const antennaY = getY(antenna.latitude);
+
+            // Fixed screen size - 50m coverage area
+            const antennaRadius = 50;
+            const antennaLineWidth = 2;
+
+            // Calculate live stats from vehicles
+            const vehiclesInRange = vehicles.length;
+            const speedingVehicles = vehicles.filter(v => v.speed > 50).length;
+            const hasSpeedingVehicles = speedingVehicles > 0;
+
+            // Draw antenna sphere - changes color if speeding vehicles detected
+            ctx.beginPath();
+            ctx.arc(antennaX, antennaY, antennaRadius, 0, Math.PI * 2);
+            ctx.fillStyle = hasSpeedingVehicles ? 'rgba(239, 68, 68, 0.15)' : 'rgba(34, 197, 94, 0.12)';
+            ctx.fill();
+            ctx.strokeStyle = hasSpeedingVehicles ? 'rgba(239, 68, 68, 0.7)' : 'rgba(34, 197, 94, 0.6)';
+            ctx.lineWidth = antennaLineWidth;
+            ctx.stroke();
+
+            // Draw live stats in center of antenna sphere
+            ctx.font = 'bold 9px "Inter", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#3c4043';
+            ctx.fillText(`${vehiclesInRange} vehicles`, antennaX, antennaY - 6);
+
+            if (hasSpeedingVehicles) {
+                ctx.fillStyle = 'rgba(239, 68, 68, 1)';
+                ctx.fillText(`⚠️ ${speedingVehicles} speeding`, antennaX, antennaY + 6);
+            } else {
+                ctx.fillStyle = 'rgba(34, 197, 94, 0.8)';
+                ctx.fillText('✓ All OK', antennaX, antennaY + 6);
+            }
+        }
+
         // 4b. STREET LIGHTS (small decorative elements along roads)
         if (this.urbanDetails && zoom > 0.8) {
             this.urbanDetails.filter(d => d.type === 'streetlight').forEach(light => {
@@ -619,7 +659,7 @@ export class MapRenderer {
 
         // 5. MAȘINI & ETICHETE
         if (images.loaded) {
-            const sphereRadius = 28 * Math.max(0.6, Math.min(zoom, 1.2));
+            const sphereRadius = 28; // Constant size regardless of zoom
 
             // Calculate screen positions and detect collisions
             const vehiclePositions = vehicles.map(v => ({
@@ -682,7 +722,7 @@ export class MapRenderer {
                 const vx = v.screenX;
                 const vy = v.screenY;
                 const carImg = v.isCurrentUser ? images.userCar : images.otherCar;
-                const s = 35 * Math.max(0.6, Math.min(zoom, 1.2));
+                const s = 35; // Constant size regardless of zoom
 
                 ctx.save();
                 ctx.translate(vx, vy);
@@ -691,9 +731,16 @@ export class MapRenderer {
                     ctx.rotate(-v.rotation);
                 }
 
-                ctx.shadowColor = 'rgba(0,0,0,0.25)';
-                ctx.shadowBlur = 6;
-                ctx.shadowOffsetY = 2;
+                // Speeding indicator - red glow for vehicles over 50 km/h
+                if (v.speed > 50) {
+                    ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
+                    ctx.shadowBlur = 15;
+                    ctx.shadowOffsetY = 0;
+                } else {
+                    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+                    ctx.shadowBlur = 6;
+                    ctx.shadowOffsetY = 2;
+                }
 
                 if (carImg) {
                     ctx.drawImage(carImg, -s/2, -s/2, s, s);
@@ -701,22 +748,52 @@ export class MapRenderer {
 
                 ctx.restore();
 
+                // Exclamation mark ABOVE speeding cars
+                if (v.speed > 50) {
+                    ctx.save();
+                    // Red circle background for exclamation
+                    ctx.beginPath();
+                    ctx.arc(vx, vy - s/2 - 15, 12, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Exclamation mark
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 14px "Inter", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('!', vx, vy - s/2 - 15);
+                    ctx.restore();
+                }
+
                 ctx.shadowBlur = 0;
                 ctx.font = '500 10px "Inter", sans-serif';
                 const label = v.id;
                 const tw = ctx.measureText(label).width;
 
-                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                // Label background - red for speeding vehicles
+                ctx.fillStyle = v.speed > 50 ? 'rgba(239, 68, 68, 0.9)' : 'rgba(255,255,255,0.9)';
                 if (ctx.roundRect) {
                     ctx.beginPath();
                     ctx.roundRect(vx - tw/2 - 6, vy + s/2 + 4, tw + 12, 16, 8);
                     ctx.fill();
                 }
 
-                ctx.fillStyle = '#3c4043';
+                // Label text - white for speeding, dark for normal
+                ctx.fillStyle = v.speed > 50 ? '#ffffff' : '#3c4043';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
                 ctx.fillText(label, vx, vy + s/2 + 7);
+
+                // Speed indicator for speeding vehicles
+                if (v.speed > 50) {
+                    ctx.font = 'bold 8px "Inter", sans-serif';
+                    ctx.fillStyle = 'rgba(239, 68, 68, 1)';
+                    ctx.fillText(`${Math.round(v.speed)} km/h`, vx, vy + s/2 + 22);
+                }
             });
         }
 

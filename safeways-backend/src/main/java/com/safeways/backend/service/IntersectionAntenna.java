@@ -8,6 +8,8 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.stream.Collectors;
 
 @Service
 public class IntersectionAntenna {
@@ -16,17 +18,101 @@ public class IntersectionAntenna {
     private AiDecisionService aiDecisionService;
 
     private List<Vehicle> vehiclesInRange = new ArrayList<>();
+    private CopyOnWriteArrayList<VehicleLiveData> liveVehicleData = new CopyOnWriteArrayList<>();
     private String nodeId = "Main_Node";
 
     // Weather condition at antenna level (can simulate rain)
     private WeatherCondition currentWeather = WeatherCondition.RAIN;
 
+    // Antenna coverage area - 50m radius (in coordinate units: 50m ≈ 0.00045 degrees)
+    private static final double ANTENNA_RANGE = 0.00045;
+
     // Collision detection parameters
-    private static final double COLLISION_RADIUS = 0.0003; // in coordinate units
+    private static final double COLLISION_RADIUS = 0.00045; // 50m in coordinate units
     private static final double TIME_HORIZON_SECONDS = 5.0;
+
+    // Speed limit threshold (km/h) - hardcoded at 50
+    private static final double SPEED_LIMIT = 50.0;
 
     public void receiveSignal(Vehicle v) {
         vehiclesInRange.add(v);
+
+        // Update live vehicle data
+        VehicleLiveData data = new VehicleLiveData(
+            v.getId(),
+            v.getTipVehicul(),
+            v.getX(),
+            v.getY(),
+            v.getVitezaKmH(),
+            v.getRotation(),
+            v.getVitezaKmH() > SPEED_LIMIT
+        );
+
+        // Update or add vehicle data
+        boolean found = false;
+        for (int i = 0; i < liveVehicleData.size(); i++) {
+            if (liveVehicleData.get(i).id.equals(v.getId())) {
+                liveVehicleData.set(i, data);
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            liveVehicleData.add(data);
+        }
+    }
+
+    /**
+     * Get all vehicles currently in antenna range with their live data
+     */
+    public List<VehicleLiveData> getLiveVehicleData() {
+        return new ArrayList<>(liveVehicleData);
+    }
+
+    /**
+     * Get only vehicles that are speeding (over the limit)
+     */
+    public List<VehicleLiveData> getSpeedingVehicles() {
+        return liveVehicleData.stream()
+            .filter(v -> v.isSpeeding)
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Get the current speed limit
+     */
+    public double getSpeedLimit() {
+        return SPEED_LIMIT;
+    }
+
+    /**
+     * Get the antenna range in meters
+     */
+    public double getAntennaRangeMeters() {
+        return 50.0; // 50m range
+    }
+
+    /**
+     * Get count of vehicles in range
+     */
+    public int getVehicleCount() {
+        return liveVehicleData.size();
+    }
+
+    /**
+     * Get count of speeding vehicles
+     */
+    public int getSpeedingVehicleCount() {
+        return (int) liveVehicleData.stream()
+            .filter(v -> v.isSpeeding)
+            .count();
+    }
+
+    /**
+     * Clear stale vehicle data (call periodically if needed)
+     */
+    public void clearLiveData() {
+        liveVehicleData.clear();
     }
 
     public CompletableFuture<String> processTraffic() {
@@ -118,5 +204,37 @@ public class IntersectionAntenna {
     @Deprecated
     public CompletableFuture<String> proceseazaTraficul() {
         return processTraffic();
+    }
+
+    /**
+     * DTO for live vehicle data transmitted by the antenna
+     */
+    public static class VehicleLiveData {
+        public final String id;
+        public final String type;
+        public final double x;
+        public final double y;
+        public final double speed;
+        public final double rotation;
+        public final boolean isSpeeding;
+
+        public VehicleLiveData(String id, String type, double x, double y, double speed, double rotation, boolean isSpeeding) {
+            this.id = id;
+            this.type = type;
+            this.x = x;
+            this.y = y;
+            this.speed = speed;
+            this.rotation = rotation;
+            this.isSpeeding = isSpeeding;
+        }
+
+        // Getters for JSON serialization
+        public String getId() { return id; }
+        public String getType() { return type; }
+        public double getX() { return x; }
+        public double getY() { return y; }
+        public double getSpeed() { return speed; }
+        public double getRotation() { return rotation; }
+        public boolean getIsSpeeding() { return isSpeeding; }
     }
 }
