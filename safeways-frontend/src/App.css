@@ -10,19 +10,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background-color 0.4s ease, color 0.4s ease;
 }
 
-/* Noul layout principal care ține ambele panouri */
 .infotainment-layout {
   display: flex;
   gap: 24px;
   width: 100%;
-  max-width: 1300px; /* Lățit pentru a încăpea ambele */
+  max-width: 1300px;
   padding: 20px;
   box-sizing: border-box;
 }
 
-/* Clasă comună pentru efectul de sticlă */
 .glass-panel {
   background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(24px);
@@ -33,23 +32,20 @@ body {
   inset 0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
-/* Panoul Stâng (Harta) */
 .left-panel {
-  flex: 2; /* Ocupă mai mult spațiu (~65%) */
+  flex: 2;
   padding: 35px;
   display: flex;
   flex-direction: column;
 }
 
-/* Panoul Drept (Controale verticale) */
 .right-panel {
-  flex: 1; /* Ocupă restul de spațiu (~35%) */
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 24px; /* Spațiu între vreme și player */
+  gap: 24px;
 }
 
-/* --- Stiluri Harta (din runda trecută) --- */
 .dashboard-header {
   display: flex;
   justify-content: space-between;
@@ -58,6 +54,7 @@ body {
   border-bottom: 2px solid rgba(255, 255, 255, 0.6);
   padding-bottom: 16px;
 }
+
 .dashboard-header h1 {
   font-size: 1.6rem;
   font-weight: 400;
@@ -65,10 +62,12 @@ body {
   letter-spacing: -0.5px;
   color: #111827;
 }
+
 .dashboard-header h1 span {
   font-weight: 600;
   color: #6b7280;
 }
+
 .status-indicator {
   display: flex;
   align-items: center;
@@ -79,13 +78,16 @@ body {
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.9);
 }
+
 .dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; display: inline-block; margin-right: 10px; }
 .pulse { animation: pulse-animation 2s infinite; }
+
 @keyframes pulse-animation {
   0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
   70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
+
 .map-section { display: flex; justify-content: center; flex: 1; }
 .map-glass-container {
   width: 100%;
@@ -94,47 +96,33 @@ body {
   border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.8);
 }
+
 .modern-canvas {
   width: 100%; height: 100%; border-radius: 16px; background-color: rgba(255, 255, 255, 0.3);
 }
 
-/* --- WIDGET VREME --- */
-.weather-widget {
-  padding: 24px;
-}
-.weather-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+.weather-widget { padding: 24px; }
+.weather-header { display: flex; justify-content: space-between; align-items: center; }
 .weather-temp {
   font-size: 2.5rem;
   font-weight: 700;
   color: #111827;
   letter-spacing: -1px;
 }
-.weather-icon {
-  font-size: 2.5rem;
-}
-.weather-details p {
-  margin: 5px 0 0 0;
-  font-weight: 500;
-}
-.weather-details .sub-text {
-  font-size: 0.9rem;
-  color: #4b5563;
-}
-.weather-details strong { color: #3b82f6; } /* Albastru pt precipitații */
+.weather-icon { font-size: 2.5rem; }
+.weather-details p { margin: 5px 0 0 0; font-weight: 500; }
+.weather-details .sub-text { font-size: 0.9rem; color: #4b5563; }
+.weather-details strong { color: #3b82f6; }
 
-/* --- MEDIA PLAYER (Apple Music Vibe) --- */
 .media-player {
   padding: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1; /* Îl face să se întindă până jos */
+  flex: 1;
   justify-content: center;
 }
+
 .album-art {
   width: 100%;
   max-width: 220px;
@@ -144,76 +132,27 @@ body {
   box-shadow: 0 15px 30px rgba(0,0,0,0.15);
   margin-bottom: 24px;
 }
-.art-placeholder {
+
+.album-cover-img {
   width: 100%;
   height: 100%;
-  background: linear-gradient(45deg, #ff7e5f, #feb47b); /* Culori calde, specifice albumelor */
-}
-.track-info {
-  text-align: center;
-  margin-bottom: 20px;
-  width: 100%;
-}
-.track-info h2 {
-  margin: 0;
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: #111827;
-}
-.track-info p {
-  margin: 5px 0 0 0;
-  font-size: 0.9rem;
-  color: #6b7280;
-  font-weight: 500;
+  object-fit: cover;
+  display: block;
 }
 
-.progress-container {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 12px;
-  margin-bottom: 24px;
-}
-.time-text {
-  font-size: 0.75rem;
-  color: #6b7280;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.progress-fill {
-  width: 35%; /* Procentul melodiei */
-  height: 100%;
-  background: #111827; /* Negru curat */
-  border-radius: 3px;
-}
+.track-info { text-align: center; margin-bottom: 20px; width: 100%; }
+.track-info h2 { margin: 0; font-size: 1.3rem; font-weight: 700; color: #111827; }
+.track-info p { margin: 5px 0 0 0; font-size: 0.9rem; color: #6b7280; font-weight: 500; }
 
-/* Butoane de control */
-.player-controls {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-.control-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease;
-}
+.progress-container { display: flex; align-items: center; width: 100%; gap: 12px; margin-bottom: 24px; }
+.time-text { font-size: 0.75rem; color: #6b7280; font-weight: 600; font-variant-numeric: tabular-nums; }
+.progress-bar { flex: 1; height: 6px; background: rgba(0, 0, 0, 0.1); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; background: #111827; border-radius: 3px; }
+
+.player-controls { display: flex; align-items: center; gap: 24px; }
+.control-btn { background: none; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.2s ease; }
 .control-btn:hover { transform: scale(1.1); }
-.control-btn.secondary {
-  font-size: 1.5rem;
-  color: #374151;
-}
+.control-btn.secondary { font-size: 1.5rem; color: #374151; }
 .control-btn.primary {
   font-size: 1.8rem;
   color: #111827;
@@ -223,64 +162,25 @@ body {
   border-radius: 50%;
   box-shadow: 0 8px 20px rgba(0,0,0,0.08);
 }
-.map-controls button {
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: white;
-  color: #111827;
-  font-size: 1.2rem;
-  font-weight: 600;
-  border-radius: 12px;
-  cursor: pointer;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 10px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
-}
-.map-controls button:last-child {
-  margin-bottom: 0;
-}
-.map-controls button:hover {
-  background: #f3f4f6;
-  transform: scale(1.1);
-  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
-}
 
-.map-controls button:active {
-  transform: scale(0.95); /* Efect de apăsare fizică */
-}
-button {
-  outline: none !important;
-}
-button:focus, button:active {
-  outline: none !important;
-}
-/* =========================================
-   SETĂRI: ROTIȚA SIMPLĂ ȘI MENIU PLUTITOR
-   (Design complet izolat de restul aplicației)
-   ========================================= */
-
-/* Doar iconița de rotiță, fără fundal */
 .gear-only-btn {
   position: absolute;
   top: 20px;
   left: 20px;
-  font-size: 1.8rem;
   cursor: pointer;
   z-index: 1000;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  color: #333;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s ease;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
   user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.gear-only-btn:hover {
-  transform: rotate(90deg) scale(1.1);
-}
+.gear-only-btn:hover { transform: rotate(90deg); }
+.gear-only-btn.icon-dark-mode { color: #ffffff; }
 
-/* Meniul de setări independent */
 .mini-settings-menu {
   position: absolute;
   top: 65px;
@@ -301,172 +201,24 @@ button:focus, button:active {
   transform-origin: top left;
 }
 
-.setting-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #222;
-  font-family: 'Inter', system-ui, sans-serif;
-}
+.setting-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.95rem; font-weight: 600; color: #222; }
 
 @keyframes dropDownMenu {
   0% { opacity: 0; transform: scale(0.9) translateY(-10px); }
   100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-/* Toggle Switches (Butoanele de on/off) */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 44px;
-  height: 24px;
-}
+.switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+.slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+input:checked + .slider { background-color: #333; }
+input:checked + .slider.ai-slider { background-color: #a855f7; }
+input:checked + .slider:before { transform: translateX(20px); }
 
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #ccc;
-  transition: .4s;
-  border-radius: 34px;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .4s;
-  border-radius: 50%;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
-input:checked + .slider {
-  background-color: #333;
-}
-
-input:checked + .slider.ai-slider {
-  background-color: #a855f7;
-}
-
-input:checked + .slider:before {
-  transform: translateX(20px);
-}
-
-/* =========================================
-   DARK MODE - FUNCȚIONALITATE ȘI CULORI
-   ========================================= */
-
-/* Setăm o tranziție fină globală pentru fundalul paginii */
-body {
-  transition: background-color 0.4s ease, color 0.4s ease;
-}
-
-/* Fundalul principal se face întunecat */
-body.dark-theme-active {
-  background-color: #0b0f19;
-  color: #e2e8f0;
-}
-
-/* Transformăm panourile de sticlă din alb în negru-fumuriu */
-.infotainment-layout.dark-mode .glass-panel {
-  background: rgba(20, 25, 40, 0.75) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
-  color: #ffffff;
-}
-
-/* Modificăm culorile textelor din widget-uri pentru a fi vizibile */
-.infotainment-layout.dark-mode h1,
-.infotainment-layout.dark-mode h2,
-.infotainment-layout.dark-mode p,
-.infotainment-layout.dark-mode .weather-temp {
-  color: #f8fafc;
-}
-
-.infotainment-layout.dark-mode .sub-text,
-.infotainment-layout.dark-mode .time-text {
-  color: #94a3b8;
-}
-
-/* Meniul plutitor de Setări când Dark Mode este activ */
-.mini-settings-menu.dark-panel {
-  background: rgba(30, 35, 50, 0.85) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-}
-
-.mini-settings-menu.dark-panel .setting-row {
-  color: #f8fafc; /* Text alb pe meniul negru */
-}
-
-/* Iconița minimalistă SVG */
-.gear-only-btn {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  cursor: pointer;
-  z-index: 1000;
-  color: #333; /* Culoare închisă pe light mode */
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s ease;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.gear-only-btn:hover {
-  transform: rotate(90deg);
-}
-
-/* Când este activat dark mode, iconița devine albă */
-.gear-only-btn.icon-dark-mode {
-  color: #ffffff;
-}
-
-/* =========================================
-   STILURI NOI: SVG ALB + ANIMAȚIE DE ÎNCHIDERE
-   ========================================= */
-
-/* Stilul SVG-ului: Alb, contur gri deschis și umbră */
-.gear-only-btn svg {
-  fill: #ffffff; /* Corpul rotiței e complet alb */
-  stroke: #cbd5e1; /* Conturul e un gri deschis elegant */
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2)); /* Umbra pentru a ieși în evidență */
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Pe dark mode putem lăsa o nuanță puțin mai vizibilă de gri pentru contur, dacă dorești */
-body.dark-theme-active .gear-only-btn svg {
-  stroke: #64748b;
-  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
-}
-
-/* Animația de ÎNCHIDERE a meniului (când primește clasa .closing) */
-.mini-settings-menu.closing {
-  animation: pullUpMenu 0.3s cubic-bezier(0.175, 0.885, 0.32, 1) forwards;
-}
-
-/* Keyframes pentru efectul de închidere */
-@keyframes pullUpMenu {
-  0% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.9) translateY(-10px);
-  }
-}
+body.dark-theme-active { background-color: #0b0f19; color: #e2e8f0; }
+.infotainment-layout.dark-mode .glass-panel { background: rgba(20, 25, 40, 0.75) !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; color: #ffffff; }
+.infotainment-layout.dark-mode h1, .infotainment-layout.dark-mode h2, .infotainment-layout.dark-mode p, .infotainment-layout.dark-mode .weather-temp { color: #f8fafc; }
+.infotainment-layout.dark-mode .sub-text, .infotainment-layout.dark-mode .time-text { color: #94a3b8; }
+.mini-settings-menu.dark-panel { background: rgba(30, 35, 50, 0.85) !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; }
+.mini-settings-menu.dark-panel .setting-row { color: #f8fafc; }
