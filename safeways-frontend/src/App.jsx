@@ -24,7 +24,7 @@ function App() {
             {/* PANOUL DIN STÂNGA: Harta și Navigația */}
             <div className="left-panel glass-panel">
                 <header className="dashboard-header">
-                    <h1>SafeWays <span>Autopilot</span></h1>
+                    <h1>SafeWays <span>AI-Powered Safe Driving Assistant</span></h1>
                     <div className="status-indicator">
                         <span className="dot pulse"></span>
                         V2X Active
