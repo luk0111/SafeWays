@@ -25,8 +25,11 @@ public class VehicleSimulationService {
     private Map<String, MapNode> nodesDict = new HashMap<>();
     private List<SimulatedVehicle> vehicles = new CopyOnWriteArrayList<>();
     private List<String> leftSpawnPoints = new ArrayList<>();
+    private List<String> rightSpawnPoints = new ArrayList<>();
     private int nextVehicleId = 1;
-    private int lastSpawnIndex = 0;
+    private int lastLeftSpawnIndex = 0;
+    private int lastRightSpawnIndex = 0;
+    private int spawnDirection = 0;
     private long lastUpdateTime = System.currentTimeMillis();
     private long lastSpawnTime = 0;
 
@@ -56,6 +59,12 @@ public class VehicleSimulationService {
 
         leftSpawnPoints = getLeftmostNodes();
         leftSpawnPoints.sort((a, b) -> Double.compare(
+            nodesDict.get(a).getLatitude(),
+            nodesDict.get(b).getLatitude()
+        ));
+
+        rightSpawnPoints = getRightmostNodes();
+        rightSpawnPoints.sort((a, b) -> Double.compare(
             nodesDict.get(a).getLatitude(),
             nodesDict.get(b).getLatitude()
         ));
@@ -95,6 +104,15 @@ public class VehicleSimulationService {
 
     private List<String> findPathToRight(String startNodeId) {
         Set<String> rightNodes = new HashSet<>(getRightmostNodes());
+        return findPath(startNodeId, rightNodes, true);
+    }
+
+    private List<String> findPathToLeft(String startNodeId) {
+        Set<String> leftNodes = new HashSet<>(getLeftmostNodes());
+        return findPath(startNodeId, leftNodes, false);
+    }
+
+    private List<String> findPath(String startNodeId, Set<String> targetNodes, boolean preferRight) {
         Set<String> visited = new HashSet<>();
         Queue<List<String>> queue = new LinkedList<>();
         queue.add(Collections.singletonList(startNodeId));
@@ -103,7 +121,7 @@ public class VehicleSimulationService {
             List<String> path = queue.poll();
             String current = path.get(path.size() - 1);
 
-            if (rightNodes.contains(current)) {
+            if (targetNodes.contains(current) && path.size() > 1) {
                 return path;
             }
 
@@ -121,11 +139,16 @@ public class VehicleSimulationService {
 
                     MapNode neighborNode = nodesDict.get(neighbor);
                     MapNode currentNode = nodesDict.get(current);
-                    if (neighborNode != null && currentNode != null
-                            && neighborNode.getLongitude() >= currentNode.getLongitude() - 0.001) {
-                        ((LinkedList<List<String>>) queue).addFirst(newPath);
-                    } else {
-                        queue.add(newPath);
+                    if (neighborNode != null && currentNode != null) {
+                        boolean isPreferredDirection = preferRight
+                            ? neighborNode.getLongitude() >= currentNode.getLongitude() - 0.001
+                            : neighborNode.getLongitude() <= currentNode.getLongitude() + 0.001;
+
+                        if (isPreferredDirection) {
+                            ((LinkedList<List<String>>) queue).addFirst(newPath);
+                        } else {
+                            queue.add(newPath);
+                        }
                     }
                 }
             }
@@ -134,18 +157,36 @@ public class VehicleSimulationService {
         return Collections.singletonList(startNodeId);
     }
 
-    private String getNextSpawnPoint() {
+    private String getNextLeftSpawnPoint() {
         if (leftSpawnPoints.isEmpty()) return null;
-        String nodeId = leftSpawnPoints.get(lastSpawnIndex % leftSpawnPoints.size());
-        lastSpawnIndex++;
+        String nodeId = leftSpawnPoints.get(lastLeftSpawnIndex % leftSpawnPoints.size());
+        lastLeftSpawnIndex++;
+        return nodeId;
+    }
+
+    private String getNextRightSpawnPoint() {
+        if (rightSpawnPoints.isEmpty()) return null;
+        String nodeId = rightSpawnPoints.get(lastRightSpawnIndex % rightSpawnPoints.size());
+        lastRightSpawnIndex++;
         return nodeId;
     }
 
     public synchronized Map<String, Object> spawnVehicle() {
-        String startNodeId = getNextSpawnPoint();
-        if (startNodeId == null) return Collections.emptyMap();
+        boolean goingRight = spawnDirection % 2 == 0;
+        spawnDirection++;
 
-        List<String> path = findPathToRight(startNodeId);
+        String startNodeId;
+        List<String> path;
+
+        if (goingRight) {
+            startNodeId = getNextLeftSpawnPoint();
+            if (startNodeId == null) return Collections.emptyMap();
+            path = findPathToRight(startNodeId);
+        } else {
+            startNodeId = getNextRightSpawnPoint();
+            if (startNodeId == null) return Collections.emptyMap();
+            path = findPathToLeft(startNodeId);
+        }
 
         if (path.size() < 2) return Collections.emptyMap();
 
@@ -157,18 +198,22 @@ public class VehicleSimulationService {
         double targetRotation = calculateRotation(startNode.getLongitude(), startNode.getLatitude(),
                                                    nextNode.getLongitude(), nextNode.getLatitude());
 
+        double[] offset = getLaneOffset(startNode.getLongitude(), startNode.getLatitude(),
+                                        nextNode.getLongitude(), nextNode.getLatitude(), goingRight);
+
         SimulatedVehicle vehicle = new SimulatedVehicle();
         vehicle.id = "Car-" + (nextVehicleId++);
-        vehicle.x = startNode.getLongitude();
-        vehicle.y = startNode.getLatitude();
-        vehicle.targetX = nextNode.getLongitude();
-        vehicle.targetY = nextNode.getLatitude();
+        vehicle.x = startNode.getLongitude() + offset[0];
+        vehicle.y = startNode.getLatitude() + offset[1];
+        vehicle.targetX = nextNode.getLongitude() + offset[0];
+        vehicle.targetY = nextNode.getLatitude() + offset[1];
         vehicle.path = path;
         vehicle.pathIndex = 0;
-        vehicle.speed = 0.00000015 + Math.random() * 0.00000004;
+        vehicle.speed = 0.00000015 + Math.random() * 0.00000008;
         vehicle.rotation = targetRotation;
         vehicle.targetRotation = targetRotation;
         vehicle.active = true;
+        vehicle.direction = goingRight ? "right" : "left";
 
         vehicles.add(vehicle);
 
@@ -176,11 +221,26 @@ public class VehicleSimulationService {
         result.put("id", vehicle.id);
         result.put("x", vehicle.x);
         result.put("y", vehicle.y);
+        result.put("direction", vehicle.direction);
         return result;
     }
 
     private double calculateRotation(double fromX, double fromY, double toX, double toY) {
         return Math.atan2(toY - fromY, toX - fromX);
+    }
+
+    private double[] getLaneOffset(double fromX, double fromY, double toX, double toY, boolean goingRight) {
+        double dx = toX - fromX;
+        double dy = toY - fromY;
+        double len = Math.sqrt(dx * dx + dy * dy);
+        if (len == 0) return new double[]{0, 0};
+
+        double perpX = dy / len;
+        double perpY = -dx / len;
+
+        double laneWidth = 0.000024;
+
+        return new double[]{perpX * laneWidth, perpY * laneWidth};
     }
 
     private double normalizeAngle(double angle) {
@@ -230,10 +290,14 @@ public class VehicleSimulationService {
                 MapNode nextNode = nodesDict.get(nextNodeId);
 
                 if (currentNode != null && nextNode != null) {
-                    vehicle.x = currentNode.getLongitude();
-                    vehicle.y = currentNode.getLatitude();
-                    vehicle.targetX = nextNode.getLongitude();
-                    vehicle.targetY = nextNode.getLatitude();
+                    boolean goingRight = "right".equals(vehicle.direction);
+                    double[] offset = getLaneOffset(currentNode.getLongitude(), currentNode.getLatitude(),
+                                                    nextNode.getLongitude(), nextNode.getLatitude(), goingRight);
+
+                    vehicle.x = currentNode.getLongitude() + offset[0];
+                    vehicle.y = currentNode.getLatitude() + offset[1];
+                    vehicle.targetX = nextNode.getLongitude() + offset[0];
+                    vehicle.targetY = nextNode.getLatitude() + offset[1];
                     vehicle.targetRotation = calculateRotation(currentNode.getLongitude(), currentNode.getLatitude(),
                                                                 nextNode.getLongitude(), nextNode.getLatitude());
                 }
@@ -289,6 +353,7 @@ public class VehicleSimulationService {
         double rotation;
         double targetRotation;
         boolean active;
+        String direction;
     }
 }
 

@@ -5,7 +5,10 @@ export class VehicleSimulation {
         this.adjacencyList = {};
         this.nextVehicleId = 1;
         this.leftSpawnPoints = [];
-        this.lastSpawnIndex = 0;
+        this.rightSpawnPoints = [];
+        this.lastLeftSpawnIndex = 0;
+        this.lastRightSpawnIndex = 0;
+        this.spawnDirection = 0;
         this.buildGraph();
     }
 
@@ -26,6 +29,7 @@ export class VehicleSimulation {
         });
 
         this.leftSpawnPoints = this.getLeftmostNodes();
+        this.rightSpawnPoints = this.getRightmostNodes();
     }
 
     getLeftmostNodes() {
@@ -48,11 +52,23 @@ export class VehicleSimulation {
         const maxLon = Math.max(...nodes.map(n => n.longitude));
         const threshold = maxLon - (maxLon - Math.min(...nodes.map(n => n.longitude))) * 0.25;
 
-        return nodes.filter(n => n.longitude >= threshold).map(n => n.id);
+        return nodes
+            .filter(n => n.longitude >= threshold)
+            .sort((a, b) => a.latitude - b.latitude)
+            .map(n => n.id);
     }
 
     findPathToRight(startNodeId) {
         const rightNodes = new Set(this.getRightmostNodes());
+        return this.findPath(startNodeId, rightNodes, true);
+    }
+
+    findPathToLeft(startNodeId) {
+        const leftNodes = new Set(this.getLeftmostNodes());
+        return this.findPath(startNodeId, leftNodes, false);
+    }
+
+    findPath(startNodeId, targetNodes, preferRight) {
         const visited = new Set();
         const queue = [[startNodeId]];
 
@@ -60,7 +76,7 @@ export class VehicleSimulation {
             const path = queue.shift();
             const current = path[path.length - 1];
 
-            if (rightNodes.has(current)) {
+            if (targetNodes.has(current) && path.length > 1) {
                 return path;
             }
 
@@ -76,10 +92,16 @@ export class VehicleSimulation {
 
                     const neighborNode = this.mapData.nodesDict[neighbor];
                     const currentNode = this.mapData.nodesDict[current];
-                    if (neighborNode && currentNode && neighborNode.longitude >= currentNode.longitude - 0.001) {
-                        queue.unshift(newPath);
-                    } else {
-                        queue.push(newPath);
+                    if (neighborNode && currentNode) {
+                        const isPreferredDirection = preferRight
+                            ? neighborNode.longitude >= currentNode.longitude - 0.001
+                            : neighborNode.longitude <= currentNode.longitude + 0.001;
+
+                        if (isPreferredDirection) {
+                            queue.unshift(newPath);
+                        } else {
+                            queue.push(newPath);
+                        }
                     }
                 }
             }
@@ -99,18 +121,35 @@ export class VehicleSimulation {
         return from + diff * t;
     }
 
-    getNextSpawnPoint() {
+    getNextLeftSpawnPoint() {
         if (this.leftSpawnPoints.length === 0) return null;
-        const nodeId = this.leftSpawnPoints[this.lastSpawnIndex % this.leftSpawnPoints.length];
-        this.lastSpawnIndex++;
+        const nodeId = this.leftSpawnPoints[this.lastLeftSpawnIndex % this.leftSpawnPoints.length];
+        this.lastLeftSpawnIndex++;
+        return nodeId;
+    }
+
+    getNextRightSpawnPoint() {
+        if (this.rightSpawnPoints.length === 0) return null;
+        const nodeId = this.rightSpawnPoints[this.lastRightSpawnIndex % this.rightSpawnPoints.length];
+        this.lastRightSpawnIndex++;
         return nodeId;
     }
 
     spawnVehicle() {
-        const startNodeId = this.getNextSpawnPoint();
-        if (!startNodeId) return null;
+        const goingRight = this.spawnDirection % 2 === 0;
+        this.spawnDirection++;
 
-        const path = this.findPathToRight(startNodeId);
+        let startNodeId, path;
+
+        if (goingRight) {
+            startNodeId = this.getNextLeftSpawnPoint();
+            if (!startNodeId) return null;
+            path = this.findPathToRight(startNodeId);
+        } else {
+            startNodeId = this.getNextRightSpawnPoint();
+            if (!startNodeId) return null;
+            path = this.findPathToLeft(startNodeId);
+        }
 
         if (path.length < 2) return null;
 
@@ -119,19 +158,26 @@ export class VehicleSimulation {
 
         const targetRotation = this.calculateRotation(startNode.longitude, startNode.latitude, nextNode.longitude, nextNode.latitude);
 
+        const offset = this.getLaneOffset(
+            startNode.longitude, startNode.latitude,
+            nextNode.longitude, nextNode.latitude,
+            goingRight
+        );
+
         const vehicle = {
             id: `Car-${this.nextVehicleId++}`,
-            x: startNode.longitude,
-            y: startNode.latitude,
-            targetX: nextNode.longitude,
-            targetY: nextNode.latitude,
+            x: startNode.longitude + offset.offsetX,
+            y: startNode.latitude + offset.offsetY,
+            targetX: nextNode.longitude + offset.offsetX,
+            targetY: nextNode.latitude + offset.offsetY,
             path: path,
             pathIndex: 0,
-            speed: 0.00000015 + Math.random() * 0.00000004,
+            speed: 0.00000015 + Math.random() * 0.00000008,
             rotation: targetRotation,
             targetRotation: targetRotation,
             isCurrentUser: false,
-            active: true
+            active: true,
+            direction: goingRight ? 'right' : 'left'
         };
 
         this.vehicles.push(vehicle);
@@ -140,6 +186,23 @@ export class VehicleSimulation {
 
     calculateRotation(fromX, fromY, toX, toY) {
         return Math.atan2(toY - fromY, toX - fromX);
+    }
+
+    getLaneOffset(fromX, fromY, toX, toY, goingRight) {
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const len = Math.sqrt(dx * dx + dy * dy);
+        if (len === 0) return { offsetX: 0, offsetY: 0 };
+
+        const perpX = dy / len;
+        const perpY = -dx / len;
+
+        const laneWidth = 0.000024;
+
+        return {
+            offsetX: perpX * laneWidth,
+            offsetY: perpY * laneWidth
+        };
     }
 
     update(deltaTime) {
@@ -168,10 +231,16 @@ export class VehicleSimulation {
                 const nextNode = this.mapData.nodesDict[nextNodeId];
 
                 if (currentNode && nextNode) {
-                    vehicle.x = currentNode.longitude;
-                    vehicle.y = currentNode.latitude;
-                    vehicle.targetX = nextNode.longitude;
-                    vehicle.targetY = nextNode.latitude;
+                    const offset = this.getLaneOffset(
+                        currentNode.longitude, currentNode.latitude,
+                        nextNode.longitude, nextNode.latitude,
+                        vehicle.direction === 'right'
+                    );
+
+                    vehicle.x = currentNode.longitude + offset.offsetX;
+                    vehicle.y = currentNode.latitude + offset.offsetY;
+                    vehicle.targetX = nextNode.longitude + offset.offsetX;
+                    vehicle.targetY = nextNode.latitude + offset.offsetY;
                     vehicle.targetRotation = this.calculateRotation(currentNode.longitude, currentNode.latitude, nextNode.longitude, nextNode.latitude);
                 }
             } else {
@@ -193,8 +262,8 @@ export class VehicleSimulation {
             y: v.y,
             rotation: v.rotation,
             isCurrentUser: v.isCurrentUser,
-            speed: v.speed
+            speed: v.speed,
+            direction: v.direction
         }));
     }
 }
-
