@@ -29,6 +29,7 @@ export class MapRenderer {
         this.groundTexture = []; // Cached ground texture elements
         this.processedArcs = []; // Pre-processed arcs for better rendering
         this.showCollisionSpheres = true;
+        this.trafficClouds = []; // Traffic density cloud data with opacity for smooth transitions
         this.initListeners();
     }
 
@@ -142,6 +143,138 @@ export class MapRenderer {
             order: typeOrder[arc.type] || 2,
             widthFactor: typeWidths[arc.type] || 0.8
         })).sort((a, b) => a.order - b.order);
+    }
+
+    /**
+     * Update traffic density clouds based on vehicle positions
+     * Creates heatmap-like visualization showing traffic density
+     */
+    updateTrafficClouds() {
+        if (!this.vehicles || this.vehicles.length === 0) {
+            // Fade out existing clouds
+            this.trafficClouds = this.trafficClouds.map(cloud => ({
+                ...cloud,
+                targetOpacity: 0,
+                opacity: Math.max(0, cloud.opacity - 0.03)
+            })).filter(cloud => cloud.opacity > 0.01);
+            return;
+        }
+
+        // Larger cluster radius for heatmap effect (~80m)
+        const clusterRadius = 0.00072;
+        const visited = new Set();
+        const newClusters = [];
+
+        // Find clusters of vehicles
+        this.vehicles.forEach((vehicle, idx) => {
+            if (visited.has(idx)) return;
+
+            // Find all vehicles within cluster radius
+            const cluster = [vehicle];
+            visited.add(idx);
+
+            this.vehicles.forEach((other, otherIdx) => {
+                if (visited.has(otherIdx)) return;
+
+                const dx = other.x - vehicle.x;
+                const dy = other.y - vehicle.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                if (dist <= clusterRadius) {
+                    cluster.push(other);
+                    visited.add(otherIdx);
+                }
+            });
+
+            // Only create clouds for 2+ vehicles
+            if (cluster.length >= 2) {
+                // Calculate cluster center
+                const centerX = cluster.reduce((sum, v) => sum + v.x, 0) / cluster.length;
+                const centerY = cluster.reduce((sum, v) => sum + v.y, 0) / cluster.length;
+
+                // Calculate cluster spread (max distance from center)
+                let maxDist = 0;
+                cluster.forEach(v => {
+                    const dx = v.x - centerX;
+                    const dy = v.y - centerY;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > maxDist) maxDist = dist;
+                });
+
+                // Determine color based on vehicle count
+                // Red: 5+ cars, Yellow: 3-4 cars, Green: 2 cars
+                let color;
+                if (cluster.length >= 5) {
+                    color = { r: 239, g: 68, b: 68 }; // Red
+                } else if (cluster.length >= 3) {
+                    color = { r: 251, g: 191, b: 36 }; // Yellow
+                } else {
+                    color = { r: 34, g: 197, b: 94 }; // Green
+                }
+
+                // Much larger cloud radius for heatmap effect
+                const baseCloudRadius = clusterRadius * 1.5;
+                const spreadBonus = maxDist * 1.2;
+                const densityBonus = Math.min(cluster.length * 0.00008, 0.0006); // Grows with more cars
+
+                newClusters.push({
+                    x: centerX,
+                    y: centerY,
+                    radius: baseCloudRadius + spreadBonus + densityBonus,
+                    count: cluster.length,
+                    color: color,
+                    targetOpacity: 0.45 + Math.min(cluster.length * 0.03, 0.25) // More cars = more opaque
+                });
+            }
+        });
+
+        // Merge with existing clouds for smooth transitions
+        const updatedClouds = [];
+
+        // Update existing clouds or fade them out
+        this.trafficClouds.forEach(existingCloud => {
+            // Find matching new cluster (close position)
+            const matchIdx = newClusters.findIndex(nc => {
+                const dx = nc.x - existingCloud.x;
+                const dy = nc.y - existingCloud.y;
+                return Math.sqrt(dx * dx + dy * dy) < clusterRadius * 0.5;
+            });
+
+            if (matchIdx !== -1) {
+                const match = newClusters[matchIdx];
+                // Smooth transition to new values
+                updatedClouds.push({
+                    x: existingCloud.x + (match.x - existingCloud.x) * 0.12,
+                    y: existingCloud.y + (match.y - existingCloud.y) * 0.12,
+                    radius: existingCloud.radius + (match.radius - existingCloud.radius) * 0.1,
+                    count: match.count,
+                    color: match.color,
+                    opacity: existingCloud.opacity + (match.targetOpacity - existingCloud.opacity) * 0.08,
+                    targetOpacity: match.targetOpacity
+                });
+                newClusters.splice(matchIdx, 1);
+            } else {
+                // Fade out
+                const newOpacity = existingCloud.opacity - 0.025;
+                if (newOpacity > 0.01) {
+                    updatedClouds.push({
+                        ...existingCloud,
+                        opacity: newOpacity,
+                        targetOpacity: 0
+                    });
+                }
+            }
+        });
+
+        // Add new clusters (fade in)
+        newClusters.forEach(nc => {
+            updatedClouds.push({
+                ...nc,
+                opacity: 0.03 // Start fading in
+            });
+        });
+
+        this.trafficClouds = updatedClouds;
     }
 
     generateDecorations() {
@@ -585,6 +718,94 @@ export class MapRenderer {
                     ctx.stroke();
                 }
             });
+        }
+
+        // 4.5 TRAFFIC DENSITY HEATMAP (large soft colored areas showing congestion)
+        this.updateTrafficClouds();
+        if (this.trafficClouds && this.trafficClouds.length > 0) {
+            ctx.save();
+
+            // Draw clouds in multiple passes for a softer, more heatmap-like effect
+            this.trafficClouds.forEach(cloud => {
+                const cx = getX(cloud.x);
+                const cy = getY(cloud.y);
+                const baseRadius = cloud.radius * finalScale;
+                const { r, g, b } = cloud.color;
+
+                // Outer glow layer (largest, most transparent)
+                const outerRadius = baseRadius * 1.8;
+                const outerGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, outerRadius);
+                outerGradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.3})`);
+                outerGradient.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.15})`);
+                outerGradient.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.05})`);
+                outerGradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+                ctx.beginPath();
+                ctx.arc(cx, cy, outerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = outerGradient;
+                ctx.fill();
+
+                // Middle layer
+                const midRadius = baseRadius * 1.2;
+                const midGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, midRadius);
+                midGradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.5})`);
+                midGradient.addColorStop(0.3, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.35})`);
+                midGradient.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.15})`);
+                midGradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+                ctx.beginPath();
+                ctx.arc(cx, cy, midRadius, 0, Math.PI * 2);
+                ctx.fillStyle = midGradient;
+                ctx.fill();
+
+                // Core layer (smallest, most intense)
+                const coreRadius = baseRadius * 0.7;
+                const coreGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreRadius);
+                coreGradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.7})`);
+                coreGradient.addColorStop(0.5, `rgba(${r}, ${g}, ${b}, ${cloud.opacity * 0.4})`);
+                coreGradient.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0)`);
+
+                ctx.beginPath();
+                ctx.arc(cx, cy, coreRadius, 0, Math.PI * 2);
+                ctx.fillStyle = coreGradient;
+                ctx.fill();
+            });
+
+            // Draw vehicle count labels on top
+            this.trafficClouds.forEach(cloud => {
+                const cx = getX(cloud.x);
+                const cy = getY(cloud.y);
+                const baseRadius = cloud.radius * finalScale;
+                const { r, g, b } = cloud.color;
+
+                if (zoom > 1.2 && cloud.opacity > 0.15) {
+                    // Background pill for better readability
+                    const labelText = `${cloud.count} cars`;
+                    ctx.font = 'bold 12px "Inter", sans-serif';
+                    const textWidth = ctx.measureText(labelText).width;
+
+                    ctx.fillStyle = `rgba(255, 255, 255, ${cloud.opacity * 1.2})`;
+                    ctx.beginPath();
+                    const pillX = cx - textWidth / 2 - 8;
+                    const pillY = cy - baseRadius * 0.5 - 10;
+                    const pillW = textWidth + 16;
+                    const pillH = 20;
+                    if (ctx.roundRect) {
+                        ctx.roundRect(pillX, pillY, pillW, pillH, 10);
+                    } else {
+                        ctx.rect(pillX, pillY, pillW, pillH);
+                    }
+                    ctx.fill();
+
+                    // Text
+                    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(labelText, cx, cy - baseRadius * 0.5);
+                }
+            });
+
+            ctx.restore();
         }
 
         // 4a. CENTRAL ANTENNA SPHERE (always green, larger than vehicle spheres)

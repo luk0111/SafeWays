@@ -136,6 +136,11 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
     const handleZoomIn = () => rendererRef.current?.zoomIn();
     const handleZoomOut = () => rendererRef.current?.zoomOut();
     const handleReset = () => rendererRef.current?.resetView();
+    const handleAddCar = () => {
+        if (simulationRef.current && !useBackendSimulation) {
+            simulationRef.current.spawnVehicle();
+        }
+    };
 
     return (
         <div className="map-glass-container" style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
@@ -143,6 +148,15 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                 <button onClick={handleZoomIn} title="Zoom In">+</button>
                 <button onClick={handleReset} title="Reset View">⟲</button>
                 <button onClick={handleZoomOut} title="Zoom Out">−</button>
+                {!useBackendSimulation && (
+                    <button
+                        onClick={handleAddCar}
+                        title="Add Car"
+                        style={{ fontSize: '12px', fontWeight: '500' }}
+                    >
+                        Add Car
+                    </button>
+                )}
             </div>
 
             <div style={{
