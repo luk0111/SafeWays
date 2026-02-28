@@ -3,9 +3,15 @@ export class MapRenderer {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
 
+        // Valorile reale
         this.zoom = 1;
         this.panX = 0;
         this.panY = 0;
+
+        // Valorile țintă pentru animația smooth (LERP)
+        this.targetZoom = 1;
+        this.targetPanX = 0;
+        this.targetPanY = 0;
 
         this.mapData = null;
         this.boundingBox = null;
@@ -16,8 +22,8 @@ export class MapRenderer {
         this.startX = 0;
         this.startY = 0;
 
-        // Variabilă pentru limitarea randărilor (optimizare performanță)
         this.animationFrameId = null;
+        this.isAnimating = false;
 
         this.initListeners();
     }
@@ -25,23 +31,24 @@ export class MapRenderer {
     initListeners() {
         this.canvas.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const zoomAmount = e.deltaY > 0 ? 0.9 : 1.1;
-            this.zoom *= zoomAmount;
-            this.scheduleDraw(); // Folosim scheduleDraw în loc de this.draw()
+            const zoomFactor = e.deltaY > 0 ? 0.85 : 1.15;
+            this.targetZoom *= zoomFactor;
+            this.targetZoom = Math.max(0.1, Math.min(this.targetZoom, 20));
+            this.startAnimation();
         });
 
         this.canvas.addEventListener('mousedown', (e) => {
             this.isDragging = true;
             this.canvas.style.cursor = 'grabbing';
-            this.startX = e.clientX - this.panX;
-            this.startY = e.clientY - this.panY;
+            this.startX = e.clientX - this.targetPanX;
+            this.startY = e.clientY - this.targetPanY;
         });
 
         this.canvas.addEventListener('mousemove', (e) => {
             if (!this.isDragging) return;
-            this.panX = e.clientX - this.startX;
-            this.panY = e.clientY - this.startY;
-            this.scheduleDraw(); // Folosim scheduleDraw
+            this.targetPanX = e.clientX - this.startX;
+            this.targetPanY = e.clientY - this.startY;
+            this.startAnimation();
         });
 
         window.addEventListener('mouseup', () => {
@@ -51,20 +58,22 @@ export class MapRenderer {
     }
 
     zoomIn() {
-        this.zoom *= 1.2;
-        this.scheduleDraw();
+        this.targetZoom *= 1.4;
+        this.targetZoom = Math.min(this.targetZoom, 20);
+        this.startAnimation();
     }
 
     zoomOut() {
-        this.zoom *= 0.8;
-        this.scheduleDraw();
+        this.targetZoom *= 0.7;
+        this.targetZoom = Math.max(0.1, this.targetZoom);
+        this.startAnimation();
     }
 
     resetView() {
-        this.zoom = 1;
-        this.panX = 0;
-        this.panY = 0;
-        this.scheduleDraw();
+        this.targetZoom = 1;
+        this.targetPanX = 0;
+        this.targetPanY = 0;
+        this.startAnimation();
     }
 
     updateData({ mapData, boundingBox, vehicles, images }) {
@@ -72,15 +81,43 @@ export class MapRenderer {
         if (boundingBox) this.boundingBox = boundingBox;
         if (vehicles) this.vehicles = vehicles;
         if (images) this.images = images;
-        this.scheduleDraw();
+
+        this.startAnimation();
     }
 
-    // --- OPTIMIZARE 1: Folosim RequestAnimationFrame pentru a preveni lag-ul din cauza mișcării mouse-ului ---
-    scheduleDraw() {
-        if (this.animationFrameId) {
-            cancelAnimationFrame(this.animationFrameId);
+    // --- ANIMAȚIA SMOOTH (LERP) ---
+    startAnimation() {
+        if (!this.isAnimating) {
+            this.isAnimating = true;
+            this.animate();
         }
-        this.animationFrameId = requestAnimationFrame(() => this.draw());
+    }
+
+    animate() {
+        const diffZoom = this.targetZoom - this.zoom;
+        const diffPanX = this.targetPanX - this.panX;
+        const diffPanY = this.targetPanY - this.panY;
+
+        // Ajustăm fin viteza animațiilor
+        this.zoom += diffZoom * 0.12;
+        this.panX += diffPanX * 0.3;
+        this.panY += diffPanY * 0.3;
+
+        this.draw();
+
+        if (
+            Math.abs(diffZoom) > 0.001 ||
+            Math.abs(diffPanX) > 0.5 ||
+            Math.abs(diffPanY) > 0.5
+        ) {
+            this.animationFrameId = requestAnimationFrame(() => this.animate());
+        } else {
+            this.zoom = this.targetZoom;
+            this.panX = this.targetPanX;
+            this.panY = this.targetPanY;
+            this.draw();
+            this.isAnimating = false;
+        }
     }
 
     draw() {
@@ -111,15 +148,13 @@ export class MapRenderer {
         const getCanvasX = (mapX) => offsetX + (mapX - boundingBox.minX) * finalScale;
         const getCanvasY = (mapY) => canvas.height - (offsetY + (mapY - boundingBox.minY) * finalScale);
 
-        // --- OPTIMIZARE 2: VIEWPORT CULLING ---
-        // Calculăm ce coordonate de pe hartă sunt vizibile momentan pe ecran (pe baza pan & zoom)
+        // --- CULLING (Optimizare Viewport) ---
         const mapXAtLeft = boundingBox.minX - offsetX / finalScale;
         const mapXAtRight = boundingBox.minX + (canvas.width - offsetX) / finalScale;
 
         const mapYAtTop = boundingBox.minY + (canvas.height - offsetY) / finalScale;
         const mapYAtBottom = boundingBox.minY - offsetY / finalScale;
 
-        // Adăugăm o mică marjă (10%) pentru a nu tăia brusc străzile chiar la marginea ecranului
         const marginX = Math.abs(mapXAtRight - mapXAtLeft) * 0.1;
         const marginY = Math.abs(mapYAtTop - mapYAtBottom) * 0.1;
 
@@ -128,9 +163,14 @@ export class MapRenderer {
         const visibleMinY = Math.min(mapYAtTop, mapYAtBottom) - marginY;
         const visibleMaxY = Math.max(mapYAtTop, mapYAtBottom) + marginY;
 
-        // --- DESENAREA STRĂZILOR ---
-        ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = Math.max(0.5, 1.5 * zoom);
+        // --- 1. DESENAREA STRĂZILOR (Asfalt + Linii de sens - SUBȚIRE ȘI FIN) ---
+
+        // AM REDUS GROSIMEA: Baza pleacă de la 2px, și crește foarte puțin cu zoom-ul
+        const roadWidth = Math.max(2, 6 * zoom);
+
+        // a) STRATUL 1: Baza drumului (Asfaltul) - Acum mult mai subțire
+        ctx.strokeStyle = '#64748b'; // Gri-asfalt elegant
+        ctx.lineWidth = roadWidth;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
@@ -140,44 +180,71 @@ export class MapRenderer {
             const toNode = mapData.nodesDict[arc.to];
 
             if (fromNode && toNode) {
-                // CULLING MAGIC: Dacă ambele puncte ale străzii sunt complet în afara ecranului, NU o desenăm deloc!
+                // Culling (Optimizare)
                 if (
                     (fromNode.longitude < visibleMinX && toNode.longitude < visibleMinX) ||
                     (fromNode.longitude > visibleMaxX && toNode.longitude > visibleMaxX) ||
                     (fromNode.latitude < visibleMinY && toNode.latitude < visibleMinY) ||
                     (fromNode.latitude > visibleMaxY && toNode.latitude > visibleMaxY)
                 ) {
-                    return; // Sărim peste linia asta, salvând zeci de mii de calcule!
+                    return;
                 }
-
                 ctx.moveTo(getCanvasX(fromNode.longitude), getCanvasY(fromNode.latitude));
                 ctx.lineTo(getCanvasX(toNode.longitude), getCanvasY(toNode.latitude));
             }
         });
         ctx.stroke();
 
-        // --- DESENAREA INTERSECȚIILOR (OPȚIONAL) ---
-        // Le desenăm doar când dăm suficient de mult zoom, ca să nu aglomerăm ecranul
-        if (zoom > 2.5 && mapData.intersections) {
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.8)'; // Culoare portocalie pentru intersecții
+        // b) STRATUL 2: Marcajele rutiere (Liniile punctate - DISCRETE)
+        // Le afișăm doar la zoom foarte mare
+        if (zoom > 2.0) {
+            ctx.strokeStyle = '#ffffff'; // Culoarea marcajului (Alb)
+            // Lățimea e microscopică comparativ cu lățimea străzii
+            ctx.lineWidth = Math.max(0.1, 0.5 * zoom);
 
-            mapData.intersections.forEach(intersection => {
-                // Verificăm dacă intersecția se află în zona vizibilă de pe ecran (Culling)
+            // Creăm un efect discret
+            ctx.setLineDash([12 * zoom, 15 * zoom]);
+
+            ctx.beginPath();
+            mapData.arcs.forEach(arc => {
+                const fromNode = mapData.nodesDict[arc.from];
+                const toNode = mapData.nodesDict[arc.to];
+
+                if (fromNode && toNode) {
+                    if (
+                        (fromNode.longitude < visibleMinX && toNode.longitude < visibleMinX) ||
+                        (fromNode.longitude > visibleMaxX && toNode.longitude > visibleMaxX) ||
+                        (fromNode.latitude < visibleMinY && toNode.latitude < visibleMinY) ||
+                        (fromNode.latitude > visibleMaxY && toNode.latitude > visibleMaxY)
+                    ) {
+                        return;
+                    }
+                    ctx.moveTo(getCanvasX(fromNode.longitude), getCanvasY(fromNode.latitude));
+                    ctx.lineTo(getCanvasX(toNode.longitude), getCanvasY(toNode.latitude));
+                }
+            });
+            ctx.stroke();
+
+            // IMPORTANT: Resetăm setLineDash!
+            ctx.setLineDash([]);
+        }
+        // --- 2. DESENAREA INTERSECȚIILOR (Albastru Transparent) ---
+        if (mapData.intersections && mapData.intersections.length > 0) {
+            ctx.fillStyle = 'rgba(59, 130, 246, 0.5)'; // Culoarea albastru-transparent
+
+            mapData.intersections.forEach(node => {
                 if (
-                    intersection.longitude >= visibleMinX && intersection.longitude <= visibleMaxX &&
-                    intersection.latitude >= visibleMinY && intersection.latitude <= visibleMaxY
+                    node.longitude >= visibleMinX && node.longitude <= visibleMaxX &&
+                    node.latitude >= visibleMinY && node.latitude <= visibleMaxY
                 ) {
-                    const x = getCanvasX(intersection.longitude);
-                    const y = getCanvasY(intersection.latitude);
-
                     ctx.beginPath();
-                    ctx.arc(x, y, 4 * zoom, 0, Math.PI * 2); // Cercul crește puțin cu zoom-ul
+                    ctx.arc(getCanvasX(node.longitude), getCanvasY(node.latitude), Math.max(2, 3 * zoom), 0, Math.PI * 2);
                     ctx.fill();
                 }
             });
         }
 
-        // --- DESENAREA MAȘINILOR ---
+        // --- 3. DESENAREA MAȘINILOR ---
         if (!images.loaded) return;
 
         vehicles.forEach(v => {

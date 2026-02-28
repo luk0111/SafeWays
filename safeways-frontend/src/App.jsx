@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createV2xClient } from './services/v2xService';
 import IntersectionMap from './components/IntersectionMap';
 import IntroScreen from './components/IntroScreen';
@@ -13,20 +13,49 @@ function App() {
     ]);
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [isClosing, setIsClosing] = useState(false); // Stare nouă pentru animația de închidere
+    const [isClosing, setIsClosing] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [aiEnhancing, setAiEnhancing] = useState(true);
 
-    // Funcția care gestionează deschiderea/închiderea cu animație
+    // --- 🎵 MUSIC PLAYER STATES ---
+    const [isPlaying, setIsPlaying] = useState(true);
+    const [progress, setProgress] = useState(84); // 1:24
+    const songDuration = 243; // 4:03
+
+    // SOLUȚIA: Folosim useCallback pentru a împiedica resetarea Intro-ului
+    // atunci când timer-ul melodiei dă refresh la componentă
+    const handleIntroComplete = useCallback(() => {
+        setShowIntro(false);
+    }, []);
+
+    // Music Player Timer Logic
+    useEffect(() => {
+        let timer;
+        if (isPlaying && progress < songDuration) {
+            timer = setInterval(() => {
+                setProgress(prev => prev + 1);
+            }, 1000);
+        } else if (progress >= songDuration) {
+            setIsPlaying(false);
+        }
+        return () => clearInterval(timer);
+    }, [isPlaying, progress]);
+
+    const formatTime = (timeInSeconds) => {
+        const m = Math.floor(timeInSeconds / 60);
+        const s = timeInSeconds % 60;
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
+    };
+
     const toggleSettings = () => {
         if (isSettingsOpen && !isClosing) {
-            setIsClosing(true); // Începe animația de închidere
+            setIsClosing(true);
             setTimeout(() => {
-                setIsSettingsOpen(false); // Elimină complet din DOM după 300ms
+                setIsSettingsOpen(false);
                 setIsClosing(false);
             }, 300);
         } else if (!isSettingsOpen) {
-            setIsSettingsOpen(true); // Deschide meniul
+            setIsSettingsOpen(true);
         }
     };
 
@@ -48,26 +77,24 @@ function App() {
 
     return (
         <>
-            {showIntro && <IntroScreen onComplete={() => setShowIntro(false)} />}
+            {/* Acum trimitem funcția "înghețată" către IntroScreen */}
+            {showIntro && <IntroScreen onComplete={handleIntroComplete} />}
 
-            {/* Iconița de setări - acum apelăm toggleSettings */}
             <div
                 className="gear-only-btn"
                 onClick={toggleSettings}
                 title="Setări"
             >
-                {/* SVG-ul actualizat să preia stilurile din CSS */}
                 <svg viewBox="0 0 24 24" width="30" height="30" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="3" fill="none"></circle>
                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                 </svg>
             </div>
 
-            {/* Meniul este randat dacă e deschis SAU dacă e în curs de închidere */}
             {(isSettingsOpen || isClosing) && (
                 <div className={`mini-settings-menu ${isDarkMode ? 'dark-panel' : ''} ${isClosing ? 'closing' : ''}`}>
                     <div className="setting-row">
-                        <span>Dark Mode</span>
+                        <span>Tema Întunecată</span>
                         <label className="switch">
                             <input
                                 type="checkbox"
@@ -125,17 +152,30 @@ function App() {
                             <h2>Starboy</h2>
                             <p>The Weeknd, Kiss FM</p>
                         </div>
+
                         <div className="progress-container">
-                            <div className="time-text">1:24</div>
+                            <div className="time-text">{formatTime(progress)}</div>
                             <div className="progress-bar">
-                                <div className="progress-fill"></div>
+                                <div
+                                    className="progress-fill"
+                                    style={{
+                                        width: `${(progress / songDuration) * 100}%`,
+                                        transition: 'width 1s linear'
+                                    }}
+                                ></div>
                             </div>
-                            <div className="time-text">-2:39</div>
+                            <div className="time-text">-{formatTime(songDuration - progress)}</div>
                         </div>
+
                         <div className="player-controls">
-                            <button className="control-btn secondary">⏮</button>
-                            <button className="control-btn primary">⏸</button>
-                            <button className="control-btn secondary">⏭</button>
+                            <button className="control-btn secondary" onClick={() => setProgress(0)}>⏮</button>
+                            <button
+                                className="control-btn primary"
+                                onClick={() => setIsPlaying(!isPlaying)}
+                            >
+                                {isPlaying ? '⏸' : '▶'}
+                            </button>
+                            <button className="control-btn secondary" onClick={() => setProgress(songDuration)}>⏭</button>
                         </div>
                     </div>
                 </div>

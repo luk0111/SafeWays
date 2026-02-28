@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MapRenderer } from '../utils/MapRenderer'; // Importăm noua clasă
+import { MapRenderer } from '../utils/MapRenderer';
 
 const IntersectionMap = ({ vehicles }) => {
     const canvasRef = useRef(null);
-    const rendererRef = useRef(null); // Păstrăm instanța clasei
+    const rendererRef = useRef(null);
 
     const [mapData, setMapData] = useState(null);
     const [boundingBox, setBoundingBox] = useState({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
@@ -50,7 +50,7 @@ const IntersectionMap = ({ vehicles }) => {
                     nodesDictionary[node.id] = node;
                 });
 
-                // --- 🚦 CALCUL INTERSECȚII ---
+                // --- 🚦 CALCUL INTERSECȚII (cu Clustering) ---
                 const nodeConnections = {};
 
                 // Numărăm legăturile pentru fiecare nod
@@ -59,24 +59,52 @@ const IntersectionMap = ({ vehicles }) => {
                     nodeConnections[arc.to] = (nodeConnections[arc.to] || 0) + 1;
                 });
 
-                // Filtrăm doar nodurile care au 3 sau mai multe legături
-                const intersections = [];
+                // 1. Găsim toate nodurile brute care ar putea fi intersecții
+                const rawIntersections = [];
                 Object.keys(nodeConnections).forEach(nodeId => {
-                    if (nodeConnections[nodeId] >= 6 && nodesDictionary[nodeId]) {
-                        intersections.push(nodesDictionary[nodeId]); // Salvăm obiectul complet al nodului
+                    // Nodurile cu >= 3 conexiuni sunt considerate intersecții de bază
+                    if (nodeConnections[nodeId] >= 3 && nodesDictionary[nodeId]) {
+                        rawIntersections.push(nodesDictionary[nodeId]);
                     }
                 });
 
-                console.log(`🛣️ Am detectat ${intersections.length} intersecții valide!`);
+                // 2. Aplicăm Clustering Spațial
+                const CLUSTER_THRESHOLD = 0.0004; // Distanța de unire (ajustează dacă e nevoie)
+                const clusteredIntersections = [];
+
+                rawIntersections.forEach(node => {
+                    let isClustered = false;
+
+                    // Căutăm dacă există deja un cluster în apropiere
+                    for (let i = 0; i < clusteredIntersections.length; i++) {
+                        const clusterCenter = clusteredIntersections[i];
+
+                        const dx = node.longitude - clusterCenter.longitude;
+                        const dy = node.latitude - clusterCenter.latitude;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < CLUSTER_THRESHOLD) {
+                            isClustered = true; // Nodul face parte din acest cluster
+                            break;
+                        }
+                    }
+
+                    // Dacă nu e aproape de niciunul existent, formăm un cluster nou
+                    if (!isClustered) {
+                        clusteredIntersections.push(node);
+                    }
+                });
+
+                console.log(`🛣️ Am găsit ${rawIntersections.length} noduri de intersecție, pe care le-am grupat în ${clusteredIntersections.length} intersecții reale!`);
                 // -----------------------------
 
                 setBoundingBox({ minX, maxX, minY, maxY });
 
-                // Am adăugat 'intersections' în obiectul mapData ca să le putem folosi la desenare
+                // Trimitem intersecțiile "curățate" mai departe
                 setMapData({
                     arcs: data.arcs,
                     nodesDict: nodesDictionary,
-                    intersections: intersections
+                    intersections: clusteredIntersections
                 });
             })
             .catch(err => console.error("Eroare la Fetch către backend:", err));
