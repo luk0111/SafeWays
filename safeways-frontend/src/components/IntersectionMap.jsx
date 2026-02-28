@@ -13,6 +13,8 @@ const IntersectionMap = ({ vehicles }) => {
 
     // 1. Preluarea datelor și imaginilor (se rulează o singură dată)
     useEffect(() => {
+        let isMounted = true;
+
         const userCarImg = new Image();
         userCarImg.src = '/car.png';
 
@@ -29,22 +31,28 @@ const IntersectionMap = ({ vehicles }) => {
                 otherCarImg.onerror = () => resolve(false);
             })
         ]).then(() => {
-            setImages({ loaded: true, userCar: userCarImg, otherCar: otherCarImg });
+            if (isMounted) {
+                setImages({ loaded: true, userCar: userCarImg, otherCar: otherCarImg });
+            }
         });
 
-        // Fetch real map data from OpenStreetMap for Brasov, Romania
+        // Fetch map data for Brasov, Romania
         fetchBrasovMapData()
             .then(data => {
-                console.log(`🗺️ Loaded map: ${data.source}`);
-                console.log(`📍 ${Object.keys(data.nodesDict).length} nodes, ${data.arcs.length} streets, ${data.intersections.length} intersections`);
-
-                setMapSource(data.source);
-                setMapData(data);
-                setBoundingBox(calculateBoundingBox(data));
+                if (isMounted) {
+                    console.log(`🗺️ Loaded map: ${data.source}`);
+                    setMapSource(data.source);
+                    setMapData(data);
+                    setBoundingBox(calculateBoundingBox(data));
+                }
             })
             .catch(err => {
                 console.error("Error fetching map data:", err);
             });
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     // 2. Inițializarea Motorului de Randare a Hărții (MapRenderer)
@@ -52,6 +60,14 @@ const IntersectionMap = ({ vehicles }) => {
         if (canvasRef.current && !rendererRef.current) {
             rendererRef.current = new MapRenderer(canvasRef.current);
         }
+
+        return () => {
+            // Cleanup renderer on unmount
+            if (rendererRef.current) {
+                rendererRef.current.destroy?.();
+                rendererRef.current = null;
+            }
+        };
     }, []);
 
     // 3. Trimiterea datelor actualizate către clasa de randare

@@ -15,39 +15,8 @@ const BRASOV_BOUNDS = {
  * Fetches street data from OpenStreetMap for Brasov center
  */
 export async function fetchBrasovMapData() {
-    const { south, north, west, east } = BRASOV_BOUNDS;
-
-    // Overpass QL query to get roads and streets
-    const query = `
-        [out:json][timeout:25];
-        (
-            way["highway"~"^(primary|secondary|tertiary|residential|unclassified|living_street|pedestrian|service)$"](${south},${west},${north},${east});
-        );
-        out body;
-        >;
-        out skel qt;
-    `;
-
-    try {
-        const response = await fetch('https://overpass-api.de/api/interpreter', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: `data=${encodeURIComponent(query)}`
-        });
-
-        if (!response.ok) {
-            throw new Error(`Overpass API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        return parseOSMData(data);
-    } catch (error) {
-        console.error('Failed to fetch OSM data:', error);
-        // Return fallback data if API fails
-        return getFallbackBrasovData();
-    }
+    // Use curated fallback data for consistent, clean map display
+    return getFallbackBrasovData();
 }
 
 /**
@@ -188,13 +157,21 @@ function getFallbackBrasovData() {
         { from: 'n2', to: 'n15', type: 'tertiary', name: '' },
     ];
 
-    const intersections = [
-        nodes['n1'],  // Piata Sfatului - main intersection
-        nodes['n2'],
-        nodes['n4'],
-        nodes['n7'],
-        nodes['n11'],
-    ];
+    // Dynamically calculate intersections based on node connections
+    const nodeConnections = {};
+    arcs.forEach(arc => {
+        nodeConnections[arc.from] = (nodeConnections[arc.from] || 0) + 1;
+        nodeConnections[arc.to] = (nodeConnections[arc.to] || 0) + 1;
+    });
+
+    // Nodes with 3+ connections are intersections
+    const intersections = Object.keys(nodeConnections)
+        .filter(nodeId => nodeConnections[nodeId] >= 3 && nodes[nodeId])
+        .map(nodeId => ({
+            id: nodes[nodeId].id,
+            latitude: nodes[nodeId].latitude,
+            longitude: nodes[nodeId].longitude
+        }));
 
     return {
         nodes: Object.values(nodes),

@@ -26,37 +26,67 @@ export class MapRenderer {
         this.decorations = [];
         this.buildings = [];
         this.urbanDetails = [];
+        this.groundTexture = []; // Cached ground texture elements
         this.processedArcs = []; // Pre-processed arcs for better rendering
         this.initListeners();
     }
 
     initListeners() {
-        this.canvas.addEventListener('wheel', (e) => {
+        // Store bound handlers for cleanup
+        this.handleWheel = (e) => {
             e.preventDefault();
             const zoomFactor = e.deltaY > 0 ? 0.85 : 1.15;
             this.targetZoom *= zoomFactor;
             this.targetZoom = Math.max(0.1, Math.min(this.targetZoom, 20));
             this.startAnimation();
-        }, { passive: false });
+        };
 
-        this.canvas.addEventListener('mousedown', (e) => {
+        this.handleMouseDown = (e) => {
             this.isDragging = true;
             this.canvas.style.cursor = 'grabbing';
             this.startX = e.clientX - this.targetPanX;
             this.startY = e.clientY - this.targetPanY;
-        });
+        };
 
-        this.canvas.addEventListener('mousemove', (e) => {
+        this.handleMouseMove = (e) => {
             if (!this.isDragging) return;
             this.targetPanX = e.clientX - this.startX;
             this.targetPanY = e.clientY - this.startY;
             this.startAnimation();
-        });
+        };
 
-        window.addEventListener('mouseup', () => {
+        this.handleMouseUp = () => {
             this.isDragging = false;
-            this.canvas.style.cursor = 'default';
-        });
+            if (this.canvas) this.canvas.style.cursor = 'default';
+        };
+
+        this.canvas.addEventListener('wheel', this.handleWheel, { passive: false });
+        this.canvas.addEventListener('mousedown', this.handleMouseDown);
+        this.canvas.addEventListener('mousemove', this.handleMouseMove);
+        window.addEventListener('mouseup', this.handleMouseUp);
+    }
+
+    destroy() {
+        // Cancel any pending animation
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
+        }
+
+        // Remove event listeners
+        if (this.canvas) {
+            this.canvas.removeEventListener('wheel', this.handleWheel);
+            this.canvas.removeEventListener('mousedown', this.handleMouseDown);
+            this.canvas.removeEventListener('mousemove', this.handleMouseMove);
+        }
+        window.removeEventListener('mouseup', this.handleMouseUp);
+
+        // Clear references
+        this.mapData = null;
+        this.decorations = [];
+        this.buildings = [];
+        this.urbanDetails = [];
+        this.isAnimating = false;
     }
 
     updateData({ mapData, boundingBox, vehicles, images }) {
@@ -116,9 +146,22 @@ export class MapRenderer {
         this.decorations = [];
         this.buildings = [];
         this.urbanDetails = [];
+        this.groundTexture = [];
 
         if (!this.mapData || !this.boundingBox) return;
         const { minX, maxX, minY, maxY } = this.boundingBox;
+
+        // Generate ground texture spots (subtle terrain variations)
+        const textureCount = 80;
+        for (let i = 0; i < textureCount; i++) {
+            this.groundTexture.push({
+                x: minX + Math.random() * (maxX - minX),
+                y: minY + Math.random() * (maxY - minY),
+                radius: 0.0008 + Math.random() * 0.002,
+                opacity: 0.02 + Math.random() * 0.03,
+                color: Math.random() > 0.5 ? '#c8d6c8' : '#d4dcd4' // Subtle green-gray tones
+            });
+        }
 
         // Build a quick lookup of road segments for collision detection
         const roadSegments = [];
@@ -310,6 +353,40 @@ export class MapRenderer {
         ctx.fillStyle = '#f1f3f4';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        // 1b. SUBTLE TEXTURE PATTERN (adds depth to empty areas)
+        ctx.save();
+        ctx.globalAlpha = 0.03;
+        const textureSize = 20;
+        for (let x = 0; x < canvas.width; x += textureSize) {
+            for (let y = 0; y < canvas.height; y += textureSize) {
+                // Subtle noise pattern
+                const noise = Math.sin(x * 0.1) * Math.cos(y * 0.1) * 0.5 + 0.5;
+                if (noise > 0.4) {
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(x, y, 1, 1);
+                }
+            }
+        }
+
+        // Add subtle grid lines
+        ctx.globalAlpha = 0.015;
+        ctx.strokeStyle = '#9aa0a6';
+        ctx.lineWidth = 0.5;
+        const gridSize = 40;
+        for (let x = 0; x < canvas.width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+        for (let y = 0; y < canvas.height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvas.width, y);
+            ctx.stroke();
+        }
+        ctx.restore();
+
         const padding = 60;
         const usableW = canvas.width - padding * 2;
         const usableH = canvas.height - padding * 2;
@@ -323,6 +400,22 @@ export class MapRenderer {
 
         const getX = (mx) => offsetX + (mx - boundingBox.minX) * finalScale;
         const getY = (my) => canvas.height - (offsetY + (my - boundingBox.minY) * finalScale);
+
+        // 1c. GROUND TEXTURE SPOTS (organic terrain feel)
+        if (this.groundTexture && this.groundTexture.length > 0) {
+            this.groundTexture.forEach(spot => {
+                const sx = getX(spot.x);
+                const sy = getY(spot.y);
+                const radius = spot.radius * finalScale;
+
+                ctx.globalAlpha = spot.opacity;
+                ctx.beginPath();
+                ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+                ctx.fillStyle = spot.color;
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
 
         // 2a. PARK AREAS (soft green patches)
         if (this.urbanDetails) {
@@ -466,24 +559,29 @@ export class MapRenderer {
         }
 
         // 4. INTERSECȚII - Clean circular nodes
-        if (mapData.intersections && mapData.intersections.length > 0) {
+        const intersections = mapData.intersections || [];
+        if (intersections.length > 0) {
             // Draw intersection fills to cover road overlaps
             ctx.fillStyle = '#ffffff';
-            mapData.intersections.forEach(n => {
-                ctx.beginPath();
-                ctx.arc(getX(n.longitude), getY(n.latitude), baseRoadW * 0.5, 0, Math.PI * 2);
-                ctx.fill();
+            intersections.forEach(n => {
+                if (n && typeof n.longitude === 'number' && typeof n.latitude === 'number') {
+                    ctx.beginPath();
+                    ctx.arc(getX(n.longitude), getY(n.latitude), baseRoadW * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             });
 
             // Draw subtle intersection markers
-            ctx.fillStyle = 'rgba(66, 133, 244, 0.12)';
-            ctx.strokeStyle = 'rgba(66, 133, 244, 0.25)';
-            ctx.lineWidth = 1;
-            mapData.intersections.forEach(n => {
-                ctx.beginPath();
-                ctx.arc(getX(n.longitude), getY(n.latitude), baseRoadW * 0.35, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
+            ctx.fillStyle = 'rgba(66, 133, 244, 0.15)';
+            ctx.strokeStyle = 'rgba(66, 133, 244, 0.3)';
+            ctx.lineWidth = 1.5;
+            intersections.forEach(n => {
+                if (n && typeof n.longitude === 'number' && typeof n.latitude === 'number') {
+                    ctx.beginPath();
+                    ctx.arc(getX(n.longitude), getY(n.latitude), baseRoadW * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                }
             });
         }
 
