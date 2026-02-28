@@ -261,6 +261,63 @@ public class VehicleSimulationService {
         return from + diff * t;
     }
 
+    /**
+     * Calculate distance between two points
+     */
+    private double getDistance(double x1, double y1, double x2, double y2) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    /**
+     * Find the closest car in front of the given vehicle within the search distance (same direction only)
+     */
+    private SimulatedVehicle findCarInFront(SimulatedVehicle vehicle, double searchDistance) {
+        SimulatedVehicle closest = null;
+        double closestDist = Double.MAX_VALUE;
+
+        // Calculate vehicle's direction vector
+        double dirX = Math.cos(vehicle.rotation);
+        double dirY = Math.sin(vehicle.rotation);
+
+        for (SimulatedVehicle other : vehicles) {
+            if (other == vehicle || !other.active) continue;
+
+            // Only consider cars going in the same direction (same lane)
+            if (!other.direction.equals(vehicle.direction)) continue;
+
+            // Vector from this vehicle to the other
+            double toOtherX = other.x - vehicle.x;
+            double toOtherY = other.y - vehicle.y;
+            double dist = Math.sqrt(toOtherX * toOtherX + toOtherY * toOtherY);
+
+            // Skip if too far
+            if (dist > searchDistance) continue;
+
+            // Check if the other car is in front (dot product > 0 means same direction)
+            double dotProduct = dirX * toOtherX + dirY * toOtherY;
+
+            // Only consider cars that are in front (positive dot product)
+            // and roughly in the same lane (within a certain angle)
+            if (dotProduct > 0) {
+                // Check angle - car should be roughly ahead, not to the side
+                double angle = Math.abs(Math.atan2(toOtherY, toOtherX) - vehicle.rotation);
+                angle = normalizeAngle(angle);
+
+                // Within ~30 degrees of the direction we're heading
+                if (Math.abs(angle) < Math.PI / 6) {
+                    if (dist < closestDist) {
+                        closestDist = dist;
+                        closest = other;
+                    }
+                }
+            }
+        }
+
+        return closest;
+    }
+
     @Scheduled(fixedRate = 50)
     public void update() {
         long currentTime = System.currentTimeMillis();
@@ -275,6 +332,11 @@ public class VehicleSimulationService {
             lastSpeedingTime = currentTime;
             nextSpeedingInterval = getRandomSpeedingInterval();
         }
+
+        // Minimum distance between cars (in coordinate units, ~10m)
+        final double MIN_CAR_DISTANCE = 0.00012;
+        // Safe following distance (in coordinate units, ~15m)
+        final double SAFE_FOLLOWING_DISTANCE = 0.00018;
 
         Iterator<SimulatedVehicle> iterator = vehicles.iterator();
         while (iterator.hasNext()) {
@@ -316,8 +378,30 @@ public class VehicleSimulationService {
                                                                 nextNode.getLongitude(), nextNode.getLatitude());
                 }
             } else {
-                // Speed multiplier based on speedKmH (base speed is calibrated for ~40 km/h)
-                double speedMultiplier = vehicle.speedKmH / 40.0;
+                // Check for car in front and adjust speed
+                SimulatedVehicle carInFront = findCarInFront(vehicle, SAFE_FOLLOWING_DISTANCE);
+
+                double effectiveSpeedKmH = vehicle.speedKmH;
+
+                if (carInFront != null) {
+                    double distToCarInFront = getDistance(vehicle.x, vehicle.y, carInFront.x, carInFront.y);
+
+                    // If too close, stop completely
+                    if (distToCarInFront <= MIN_CAR_DISTANCE) {
+                        effectiveSpeedKmH = 0;
+                    }
+                    // If within safe distance, match the car in front's speed or slow down
+                    else if (distToCarInFront < SAFE_FOLLOWING_DISTANCE) {
+                        // Gradually reduce speed as we get closer
+                        double slowdownFactor = (distToCarInFront - MIN_CAR_DISTANCE) / (SAFE_FOLLOWING_DISTANCE - MIN_CAR_DISTANCE);
+                        double targetSpeed = Math.min(vehicle.speedKmH, carInFront.speedKmH);
+                        effectiveSpeedKmH = carInFront.speedKmH * slowdownFactor + targetSpeed * (1 - slowdownFactor);
+                        effectiveSpeedKmH = Math.min(effectiveSpeedKmH, carInFront.speedKmH);
+                    }
+                }
+
+                // Speed multiplier based on effectiveSpeedKmH (base speed is calibrated for ~40 km/h)
+                double speedMultiplier = effectiveSpeedKmH / 40.0;
                 double actualSpeed = vehicle.speed * speedMultiplier;
 
                 double moveX = (dx / dist) * actualSpeed * dt;

@@ -214,6 +214,67 @@ export class VehicleSimulation {
         };
     }
 
+    // Calculate distance between two points
+    getDistance(x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Find the closest car in front of the given vehicle (same direction only)
+    findCarInFront(vehicle, searchDistance) {
+        let closest = null;
+        let closestDist = Infinity;
+
+        // Calculate vehicle's direction vector (normalized)
+        const dirX = Math.cos(vehicle.rotation);
+        const dirY = Math.sin(vehicle.rotation);
+
+        for (const other of this.vehicles) {
+            if (other === vehicle || !other.active) continue;
+
+            // Only consider cars going in the same direction (same lane)
+            if (other.direction !== vehicle.direction) continue;
+
+            // Check if both cars are actually traveling in roughly the same physical direction
+            // (their rotation angles should be similar - within ~60 degrees)
+            const rotationDiff = Math.abs(this.normalizeAngle(vehicle.rotation - other.rotation));
+            if (rotationDiff > Math.PI / 3) continue; // More than 60 degrees apart, different paths
+
+            // Vector from this vehicle to the other
+            const toOtherX = other.x - vehicle.x;
+            const toOtherY = other.y - vehicle.y;
+            const dist = Math.sqrt(toOtherX * toOtherX + toOtherY * toOtherY);
+
+            // Skip if too far
+            if (dist > searchDistance) continue;
+
+            // Project the vector to other car onto our direction
+            // Positive means the other car is ahead, negative means behind
+            const projectionDistance = dirX * toOtherX + dirY * toOtherY;
+
+            // Only consider cars that are truly IN FRONT (projection > small threshold)
+            // A car directly behind would have a negative projection
+            if (projectionDistance > 0.00001) {
+                // Calculate lateral distance (how far to the side the car is)
+                const lateralDistance = Math.abs(-dirY * toOtherX + dirX * toOtherY);
+
+                // Only consider if the car is mostly ahead and not too far to the side
+                // Car should be within our lane width (not in another lane)
+                const laneWidth = 0.00006; // Roughly lane width
+
+                if (lateralDistance < laneWidth) {
+                    if (projectionDistance < closestDist) {
+                        closestDist = projectionDistance;
+                        closest = other;
+                    }
+                }
+            }
+        }
+
+        return closest;
+    }
+
     update(deltaTime) {
         const dt = Math.min(deltaTime, 50);
         const currentTime = Date.now();
@@ -224,6 +285,11 @@ export class VehicleSimulation {
             this.lastUpdateTime = currentTime;
             this.nextSpeedingTime = this.getRandomSpeedingInterval();
         }
+
+        // Minimum distance between cars (in coordinate units, ~10m)
+        const MIN_CAR_DISTANCE = 0.00012;
+        // Safe following distance (in coordinate units, ~15m)
+        const SAFE_FOLLOWING_DISTANCE = 0.00018;
 
         this.vehicles.forEach(vehicle => {
             if (!vehicle.active) return;
@@ -261,8 +327,30 @@ export class VehicleSimulation {
                     vehicle.targetRotation = this.calculateRotation(currentNode.longitude, currentNode.latitude, nextNode.longitude, nextNode.latitude);
                 }
             } else {
-                // Speed multiplier based on speedKmH (base speed is calibrated for ~40 km/h)
-                const speedMultiplier = vehicle.speedKmH / 40;
+                // Check for car in front and adjust speed
+                const carInFront = this.findCarInFront(vehicle, SAFE_FOLLOWING_DISTANCE);
+
+                let effectiveSpeedKmH = vehicle.speedKmH;
+
+                if (carInFront) {
+                    const distToCarInFront = this.getDistance(vehicle.x, vehicle.y, carInFront.x, carInFront.y);
+
+                    // If too close, stop completely
+                    if (distToCarInFront <= MIN_CAR_DISTANCE) {
+                        effectiveSpeedKmH = 0;
+                    }
+                    // If within safe distance, match the car in front's speed or slow down
+                    else if (distToCarInFront < SAFE_FOLLOWING_DISTANCE) {
+                        // Gradually reduce speed as we get closer
+                        const slowdownFactor = (distToCarInFront - MIN_CAR_DISTANCE) / (SAFE_FOLLOWING_DISTANCE - MIN_CAR_DISTANCE);
+                        const targetSpeed = Math.min(vehicle.speedKmH, carInFront.speedKmH);
+                        effectiveSpeedKmH = carInFront.speedKmH * slowdownFactor + targetSpeed * (1 - slowdownFactor);
+                        effectiveSpeedKmH = Math.min(effectiveSpeedKmH, carInFront.speedKmH);
+                    }
+                }
+
+                // Speed multiplier based on effectiveSpeedKmH (base speed is calibrated for ~40 km/h)
+                const speedMultiplier = effectiveSpeedKmH / 40;
                 const actualSpeed = vehicle.speed * speedMultiplier;
 
                 const moveX = (dx / dist) * actualSpeed * dt;

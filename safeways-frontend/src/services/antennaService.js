@@ -17,6 +17,7 @@ export async function fetchAntennaLiveData() {
     }
 }
 
+
 /**
  * Fetch only vehicles that are speeding (over 50 km/h)
  */
