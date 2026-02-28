@@ -16,7 +16,20 @@ function App() {
     // --- 🎵 MUSIC PLAYER STATES ---
     const [isPlaying, setIsPlaying] = useState(true);
     const [progress, setProgress] = useState(84); // 1:24
+    const [isSkipping, setIsSkipping] = useState(false);
     const songDuration = 243; // 4:03
+
+    const handleSkipPrev = () => {
+        setIsSkipping(true);
+        setProgress(0);
+        setTimeout(() => setIsSkipping(false), 50);
+    };
+
+    const handleSkipNext = () => {
+        setIsSkipping(true);
+        setProgress(songDuration);
+        setTimeout(() => setIsSkipping(false), 50);
+    };
 
     const handleIntroComplete = useCallback(() => {
         setShowIntro(false);
@@ -158,7 +171,7 @@ function App() {
                                     className="progress-fill"
                                     style={{
                                         width: `${(progress / songDuration) * 100}%`,
-                                        transition: 'width 1s linear'
+                                        transition: isSkipping ? 'none' : 'width 1s linear'
                                     }}
                                 ></div>
                             </div>
@@ -166,11 +179,11 @@ function App() {
                         </div>
 
                         <div className="player-controls">
-                            <button className="control-btn secondary" onClick={() => setProgress(0)}>⏮</button>
+                            <button className="control-btn secondary" onClick={handleSkipPrev}>⏮</button>
                             <button className="control-btn primary" onClick={() => setIsPlaying(!isPlaying)}>
                                 {isPlaying ? '⏸' : '▶'}
                             </button>
-                            <button className="control-btn secondary" onClick={() => setProgress(songDuration)}>⏭</button>
+                            <button className="control-btn secondary" onClick={handleSkipNext}>⏭</button>
                         </div>
                     </div>
                 </div>
