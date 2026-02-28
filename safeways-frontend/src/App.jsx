@@ -87,7 +87,7 @@ function App() {
             {(isSettingsOpen || isClosing) && (
                 <div className={`mini-settings-menu ${isDarkMode ? 'dark-panel' : ''} ${isClosing ? 'closing' : ''}`}>
                     <div className="setting-row">
-                        <span>Tema Întunecată</span>
+                        <span>Dark Theme</span>
                         <label className="switch">
                             <input type="checkbox" checked={isDarkMode} onChange={() => setIsDarkMode(!isDarkMode)} />
                             <span className="slider"></span>
