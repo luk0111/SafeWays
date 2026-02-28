@@ -156,6 +156,27 @@ export class MapRenderer {
         });
         ctx.stroke();
 
+        // --- DESENAREA INTERSECȚIILOR (OPȚIONAL) ---
+        // Le desenăm doar când dăm suficient de mult zoom, ca să nu aglomerăm ecranul
+        if (zoom > 2.5 && mapData.intersections) {
+            ctx.fillStyle = 'rgba(245, 158, 11, 0.8)'; // Culoare portocalie pentru intersecții
+
+            mapData.intersections.forEach(intersection => {
+                // Verificăm dacă intersecția se află în zona vizibilă de pe ecran (Culling)
+                if (
+                    intersection.longitude >= visibleMinX && intersection.longitude <= visibleMaxX &&
+                    intersection.latitude >= visibleMinY && intersection.latitude <= visibleMaxY
+                ) {
+                    const x = getCanvasX(intersection.longitude);
+                    const y = getCanvasY(intersection.latitude);
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, 4 * zoom, 0, Math.PI * 2); // Cercul crește puțin cu zoom-ul
+                    ctx.fill();
+                }
+            });
+        }
+
         // --- DESENAREA MAȘINILOR ---
         if (!images.loaded) return;
 
