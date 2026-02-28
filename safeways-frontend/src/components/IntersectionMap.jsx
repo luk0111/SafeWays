@@ -33,6 +33,8 @@ const IntersectionMap = ({ vehicles }) => {
         fetch('http://localhost:6767/api/map')
             .then(res => res.json())
             .then(data => {
+                console.log(`Am primit ${data.nodes.length} noduri și ${data.arcs.length} străzi!`);
+
                 let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
                 const nodesDictionary = {};
 
@@ -48,8 +50,34 @@ const IntersectionMap = ({ vehicles }) => {
                     nodesDictionary[node.id] = node;
                 });
 
+                // --- 🚦 CALCUL INTERSECȚII ---
+                const nodeConnections = {};
+
+                // Numărăm legăturile pentru fiecare nod
+                data.arcs.forEach(arc => {
+                    nodeConnections[arc.from] = (nodeConnections[arc.from] || 0) + 1;
+                    nodeConnections[arc.to] = (nodeConnections[arc.to] || 0) + 1;
+                });
+
+                // Filtrăm doar nodurile care au 3 sau mai multe legături
+                const intersections = [];
+                Object.keys(nodeConnections).forEach(nodeId => {
+                    if (nodeConnections[nodeId] >= 3 && nodesDictionary[nodeId]) {
+                        intersections.push(nodesDictionary[nodeId]); // Salvăm obiectul complet al nodului
+                    }
+                });
+
+                console.log(`🛣️ Am detectat ${intersections.length} intersecții valide!`);
+                // -----------------------------
+
                 setBoundingBox({ minX, maxX, minY, maxY });
-                setMapData({ arcs: data.arcs, nodesDict: nodesDictionary });
+
+                // Am adăugat 'intersections' în obiectul mapData ca să le putem folosi la desenare
+                setMapData({
+                    arcs: data.arcs,
+                    nodesDict: nodesDictionary,
+                    intersections: intersections
+                });
             })
             .catch(err => console.error("Eroare la Fetch către backend:", err));
     }, []);
