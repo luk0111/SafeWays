@@ -3,12 +3,19 @@ package com.safeways.backend.model.vehicle;
 import com.safeways.backend.model.Intention;
 
 public class CivilVehicle extends Vehicle {
-    public CivilVehicle(String id, double vitezaKmH, double greutateKg, String targetNodeId, double distantaPanaLaNod) {
-        super(id, vitezaKmH, greutateKg, targetNodeId, distantaPanaLaNod);
+
+    // Legacy constructor
+    public CivilVehicle(String id, double speedKmH, double weightKg, String targetNodeId, double distanceToNode) {
+        super(id, speedKmH, weightKg, targetNodeId, distanceToNode);
+    }
+
+    // 2D constructor
+    public CivilVehicle(String id, double speedKmH, double weightKg, double x, double y, double rotation) {
+        super(id, speedKmH, weightKg, x, y, rotation);
     }
 
     @Override
     public String getTipVehicul() {
-        return "Civil (Prioritate normală)";
+        return "Civil (Normal priority)";
     }
 }

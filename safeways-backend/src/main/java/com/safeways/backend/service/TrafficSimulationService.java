@@ -18,81 +18,81 @@ import java.util.List;
 public class TrafficSimulationService {
 
     @Autowired
-    private IntersectionAntenna antena;
+    private IntersectionAntenna antenna;
 
-    private List<Vehicle> vehiculeActive = new ArrayList<>();
+    private List<Vehicle> activeVehicles = new ArrayList<>();
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
     public void init() {
-        // Punem 2 mașini de test care merg pe curs de coliziune spre "Nod_Test"
-        vehiculeActive.add(new CivilVehicle("Auto_A", 60.0, 1500, "Nod_Test", 80.0));
-        vehiculeActive.add(new CivilVehicle("Camion_B", 50.0, 5000, "Nod_Test", 80.0));
+        // Add 2 test vehicles on collision course towards "Test_Node"
+        activeVehicles.add(new CivilVehicle("Car_A", 60.0, 1500, "Test_Node", 80.0));
+        activeVehicles.add(new CivilVehicle("Truck_B", 50.0, 5000, "Test_Node", 80.0));
     }
 
-    @Scheduled(fixedRate = 500) // Se execută automat la fiecare 0.5 secunde
+    @Scheduled(fixedRate = 500) // Runs automatically every 0.5 seconds
     public void runSimulationTick() {
-        if(vehiculeActive.isEmpty()) return;
+        if(activeVehicles.isEmpty()) return;
 
-        System.out.println("⏳ Tick Simulare... (0.5s)");
+        System.out.println("⏳ Simulation Tick... (0.5s)");
 
         // ==========================================
-        // 1. APLICĂM FIZICA PENTRU FIECARE MAȘINĂ
+        // 1. APPLY PHYSICS FOR EACH VEHICLE
         // ==========================================
-        for (Vehicle v : vehiculeActive) {
-            double vMs = v.getVitezaKmH() / 3.6; // Transformăm în m/s
+        for (Vehicle v : activeVehicles) {
+            double speedMs = v.getSpeedKmH() / 3.6; // Convert to m/s
 
-            double aMaxFranare = v.getCapabilitateFranareBaza() * 0.7; // Presupunem vreme ploioasă (0.7)
-            double aConfortabil = 2.0; // m/s^2
-            double aAccelerare = (v.getGreutateKg() > 3500) ? 1.0 : 3.0; // m/s^2
+            double maxBrakingDecel = v.getCapabilitateFranareBaza() * 0.7; // Assume rainy weather (0.7)
+            double comfortableDecel = 2.0; // m/s^2
+            double acceleration = (v.getWeightKg() > 3500) ? 1.0 : 3.0; // m/s^2
 
-            switch (v.getActiuneCurenta()) {
-                case "OPRESTE":
-                    vMs = Math.max(0, vMs - (aMaxFranare * 0.5));
+            switch (v.getCurrentAction()) {
+                case "STOP":
+                    speedMs = Math.max(0, speedMs - (maxBrakingDecel * 0.5));
                     break;
-                case "INCETINESTE":
-                    double targetMs = v.getVitezaTintaKmH() / 3.6;
-                    if (vMs > targetMs) {
-                        vMs = Math.max(targetMs, vMs - (aConfortabil * 0.5));
+                case "SLOW_DOWN":
+                    double targetMs = v.getTargetSpeedKmH() / 3.6;
+                    if (speedMs > targetMs) {
+                        speedMs = Math.max(targetMs, speedMs - (comfortableDecel * 0.5));
                     }
                     break;
-                case "ACCELEREAZA":
-                    vMs = vMs + (aAccelerare * 0.5);
+                case "ACCELERATE":
+                    speedMs = speedMs + (acceleration * 0.5);
                     break;
-                case "CONTINUA":
+                case "CONTINUE":
                     break;
             }
 
-            v.setVitezaKmH(vMs * 3.6);
+            v.setSpeedKmH(speedMs * 3.6);
 
-            // Mutăm mașina
-            double distantaParcursaMetri = vMs * 0.5;
-            v.setDistantaPanaLaNod(Math.max(0, v.getDistantaPanaLaNod() - distantaParcursaMetri));
+            // Move the vehicle
+            double distanceTraveledMeters = speedMs * 0.5;
+            v.setDistanceToNode(Math.max(0, v.getDistanceToNode() - distanceTraveledMeters));
 
-            System.out.printf("   🚗 %s: Viteza %.1f km/h | Distanta: %.1f m | Actiune: %s%n",
-                    v.getId(), v.getVitezaKmH(), v.getDistantaPanaLaNod(), v.getActiuneCurenta());
+            System.out.printf("   🚗 %s: Speed %.1f km/h | Distance: %.1f m | Action: %s%n",
+                    v.getId(), v.getSpeedKmH(), v.getDistanceToNode(), v.getCurrentAction());
 
-            if (v.getDistantaPanaLaNod() > 0) {
-                antena.primesteSemnal(v);
+            if (v.getDistanceToNode() > 0) {
+                antenna.receiveSignal(v);
             }
         }
 
         // ==========================================
-        // 2. ANTENA VERIFICĂ PERICOLUL ȘI CERE NOI COMENZI
+        // 2. ANTENNA CHECKS DANGER AND REQUESTS NEW COMMANDS
         // ==========================================
-        antena.proceseazaTraficul().thenAccept(decizie -> {
-            if(!decizie.contains("AI offline") && !decizie.contains("Trafic sigur")) {
+        antenna.processTraffic().thenAccept(decision -> {
+            if(!decision.contains("AI offline") && !decision.contains("Traffic safe")) {
 
                 try {
-                    String jsonCurat = decizie.replace("```json", "").replace("```", "").trim();
-                    System.out.println("\n🤖 RĂSPUNS BRUT AI:\n" + jsonCurat);
+                    String cleanJson = decision.replace("```json", "").replace("```", "").trim();
+                    System.out.println("\n🤖 RAW AI RESPONSE:\n" + cleanJson);
 
-                    JsonNode rootNode = objectMapper.readTree(jsonCurat);
+                    JsonNode rootNode = objectMapper.readTree(cleanJson);
 
-                    // Tratăm rebeliunile AI-ului (când dă obiect în loc de array)
+                    // Handle AI response format variations (when it gives object instead of array)
                     if (rootNode.isObject()) {
-                        if (rootNode.has("vehicleId") || rootNode.has("id") || rootNode.has("actiune") || rootNode.has("Actiune")) {
-                            rootNode = objectMapper.createArrayNode().add(rootNode); // Forțăm într-o listă
+                        if (rootNode.has("vehicleId") || rootNode.has("id") || rootNode.has("action") || rootNode.has("Action")) {
+                            rootNode = objectMapper.createArrayNode().add(rootNode); // Force into a list
                         }
                         else if (rootNode.elements().hasNext()) {
                             rootNode = rootNode.elements().next();
@@ -106,25 +106,25 @@ public class TrafficSimulationService {
                             if (node.has("vehicleId")) id = node.get("vehicleId").asText();
                             else if (node.has("id")) id = node.get("id").asText();
 
-                            String actiune = "CONTINUA";
-                            if (node.has("actiune")) actiune = node.get("actiune").asText().toUpperCase();
-                            else if (node.has("Actiune")) actiune = node.get("Actiune").asText().toUpperCase();
+                            String action = "CONTINUE";
+                            if (node.has("action")) action = node.get("action").asText().toUpperCase();
+                            else if (node.has("Action")) action = node.get("Action").asText().toUpperCase();
 
-                            double vitezaTinta = node.has("vitezaTintaKmH") ? node.get("vitezaTintaKmH").asDouble() : 0.0;
+                            double targetSpeed = node.has("targetSpeedKmH") ? node.get("targetSpeedKmH").asDouble() : 0.0;
 
                             if (!id.isEmpty()) {
-                                for (Vehicle v : vehiculeActive) {
+                                for (Vehicle v : activeVehicles) {
                                     if (v.getId().equals(id)) {
-                                        v.setActiuneCurenta(actiune);
-                                        v.setVitezaTintaKmH(vitezaTinta);
-                                        System.out.println("✅ ACCEPTAT: " + id + " va executa comanda [" + actiune + "] la " + vitezaTinta + " km/h");
+                                        v.setCurrentAction(action);
+                                        v.setTargetSpeedKmH(targetSpeed);
+                                        System.out.println("✅ ACCEPTED: " + id + " will execute command [" + action + "] at " + targetSpeed + " km/h");
                                     }
                                 }
                             }
                         }
                     }
                 } catch (Exception e) {
-                    System.err.println("❌ EROARE PARSARE JSON AI! Textul primit a fost: \n" + decizie);
+                    System.err.println("❌ JSON PARSING ERROR! Received text was: \n" + decision);
                 }
             }
         });
