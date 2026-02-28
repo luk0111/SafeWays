@@ -4,7 +4,7 @@ import { fetchBrasovMapData, calculateBoundingBox } from '../services/osmService
 import { VehicleSimulation } from '../services/vehicleSimulation';
 import { createV2xClient } from '../services/v2xService';
 
-const IntersectionMap = ({ useBackendSimulation = false }) => {
+const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = true }) => {
     const canvasRef = useRef(null);
     const rendererRef = useRef(null);
     const simulationRef = useRef(null);
@@ -127,10 +127,11 @@ const IntersectionMap = ({ useBackendSimulation = false }) => {
                 mapData,
                 boundingBox,
                 vehicles,
-                images
+                images,
+                showCollisionSpheres
             });
         }
-    }, [mapData, boundingBox, vehicles, images]);
+    }, [mapData, boundingBox, vehicles, images, showCollisionSpheres]);
 
     const handleZoomIn = () => rendererRef.current?.zoomIn();
     const handleZoomOut = () => rendererRef.current?.zoomOut();

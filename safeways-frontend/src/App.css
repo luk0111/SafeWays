@@ -252,6 +252,7 @@ body {
 .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
 input:checked + .slider { background-color: #333; }
 input:checked + .slider.ai-slider { background-color: #a855f7; }
+input:checked + .slider.sphere-slider { background-color: #3b82f6; }
 input:checked + .slider:before { transform: translateX(20px); }
 
 body.dark-theme-active { background-color: #0b0f19; color: #e2e8f0; }

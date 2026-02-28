@@ -28,6 +28,7 @@ export class MapRenderer {
         this.urbanDetails = [];
         this.groundTexture = []; // Cached ground texture elements
         this.processedArcs = []; // Pre-processed arcs for better rendering
+        this.showCollisionSpheres = true;
         this.initListeners();
     }
 
@@ -89,12 +90,13 @@ export class MapRenderer {
         this.isAnimating = false;
     }
 
-    updateData({ mapData, boundingBox, vehicles, images }) {
+    updateData({ mapData, boundingBox, vehicles, images, showCollisionSpheres }) {
         const dataChanged = mapData && mapData !== this.mapData;
         if (mapData) this.mapData = mapData;
         if (boundingBox) this.boundingBox = boundingBox;
         if (vehicles) this.vehicles = vehicles;
         if (images) this.images = images;
+        if (typeof showCollisionSpheres === 'boolean') this.showCollisionSpheres = showCollisionSpheres;
 
         if (dataChanged) {
             this.generateDecorations();
@@ -617,9 +619,68 @@ export class MapRenderer {
 
         // 5. MAȘINI & ETICHETE
         if (images.loaded) {
-            vehicles.forEach(v => {
-                const vx = getX(v.x);
-                const vy = getY(v.y);
+            const sphereRadius = 28 * Math.max(0.6, Math.min(zoom, 1.2));
+
+            // Calculate screen positions and detect collisions
+            const vehiclePositions = vehicles.map(v => ({
+                ...v,
+                screenX: getX(v.x),
+                screenY: getY(v.y),
+                collisionCount: 0
+            }));
+
+            // Check collisions between all pairs (only if spheres are enabled)
+            if (this.showCollisionSpheres) {
+                for (let i = 0; i < vehiclePositions.length; i++) {
+                    for (let j = i + 1; j < vehiclePositions.length; j++) {
+                        const v1 = vehiclePositions[i];
+                        const v2 = vehiclePositions[j];
+                        const dx = v1.screenX - v2.screenX;
+                        const dy = v1.screenY - v2.screenY;
+                        const dist = Math.sqrt(dx * dx + dy * dy);
+
+                        if (dist < sphereRadius * 2) {
+                            v1.collisionCount++;
+                            v2.collisionCount++;
+                        }
+                    }
+                }
+
+                // Draw spheres first (behind cars)
+                vehiclePositions.forEach(v => {
+                    const vx = v.screenX;
+                    const vy = v.screenY;
+
+                    let fillColor, strokeColor;
+                    if (v.collisionCount >= 2) {
+                        // 3+ cars touching - RED
+                        fillColor = 'rgba(239, 68, 68, 0.15)';
+                        strokeColor = 'rgba(239, 68, 68, 0.7)';
+                    } else if (v.collisionCount === 1) {
+                        // 2 cars touching - YELLOW
+                        fillColor = 'rgba(251, 191, 36, 0.15)';
+                        strokeColor = 'rgba(251, 191, 36, 0.7)';
+                    } else {
+                        // No collision - BLUE
+                        fillColor = 'rgba(59, 130, 246, 0.12)';
+                        strokeColor = 'rgba(59, 130, 246, 0.5)';
+                    }
+
+                    // Draw sphere
+                    ctx.beginPath();
+                    ctx.arc(vx, vy, sphereRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = fillColor;
+                    ctx.fill();
+                    ctx.strokeStyle = strokeColor;
+                    ctx.lineWidth = 2.5;
+                    ctx.stroke();
+                });
+            }
+
+            // Draw cars on top
+            vehiclePositions.forEach(v => {
+                const vx = v.screenX;
+                const vy = v.screenY;
                 const carImg = v.isCurrentUser ? images.userCar : images.otherCar;
                 const s = 35 * Math.max(0.6, Math.min(zoom, 1.2));
 

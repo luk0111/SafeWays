@@ -11,6 +11,7 @@ function App() {
     const [isClosing, setIsClosing] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(false);
     const [aiEnhancing, setAiEnhancing] = useState(true);
+    const [showCollisionSpheres, setShowCollisionSpheres] = useState(true);
 
     // --- 🎵 MUSIC PLAYER STATES ---
     const [isPlaying, setIsPlaying] = useState(true);
@@ -95,6 +96,13 @@ function App() {
                             <span className="slider ai-slider"></span>
                         </label>
                     </div>
+                    <div className="setting-row">
+                        <span>Collision Spheres</span>
+                        <label className="switch">
+                            <input type="checkbox" checked={showCollisionSpheres} onChange={() => setShowCollisionSpheres(!showCollisionSpheres)} />
+                            <span className="slider sphere-slider"></span>
+                        </label>
+                    </div>
                 </div>
             )}
 
@@ -114,7 +122,7 @@ function App() {
                         </div>
                     </header>
                     <div className="map-section">
-                        <IntersectionMap />
+                        <IntersectionMap showCollisionSpheres={showCollisionSpheres} />
                     </div>
                 </div>
 
