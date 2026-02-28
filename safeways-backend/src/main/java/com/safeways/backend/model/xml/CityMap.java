@@ -1,4 +1,4 @@
-package model.xml;
+package com.safeways.backend.model.xml;
 
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;

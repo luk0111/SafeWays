@@ -1,8 +1,8 @@
-package service;
+package com.safeways.backend.service;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import model.xml.CityMap;
+import com.safeways.backend.model.xml.CityMap;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;

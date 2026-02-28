@@ -1,4 +1,4 @@
-package model;
+package com.safeways.backend.model;
 
 import lombok.Data;
 

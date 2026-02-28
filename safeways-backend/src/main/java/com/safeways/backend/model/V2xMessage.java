@@ -1,4 +1,4 @@
-package model;
+package com.safeways.backend.model;
 
 import lombok.Data;
 
@@ -14,7 +14,7 @@ public class V2xMessage {
     private Position position;
 
     // Intenția mapată automat la Enum-ul nostru
-    private model.Intention intention;
+    private Intention intention;
 
     private String status;
 

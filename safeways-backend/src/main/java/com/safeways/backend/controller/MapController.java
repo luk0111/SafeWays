@@ -1,7 +1,7 @@
-package controller;
+package com.safeways.backend.controller;
 
-import model.xml.CityMap;
-import service.MapService;
+import com.safeways.backend.model.xml.CityMap;
+import com.safeways.backend.service.MapService;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
