@@ -1,6 +1,6 @@
 package com.safeways.backend.service;
 
-import com.safeways.backend.model.Intention;
+import com.safeways.backend.model.WeatherCondition;
 import com.safeways.backend.model.vehicle.Vehicle;
 
 public class CollisionPredictor {
@@ -8,45 +8,41 @@ public class CollisionPredictor {
     public static class Predictie {
         public double timpSosireNormal;
         public double timpSosireDacaAccelereaza;
-        public boolean riscDerapaj;
-        public double vitezaIntrareNodKmH;
+        public boolean nuPoateOpriFizic; // Dacă încearcă să frâneze, va derapa în intersecție?
 
-        public Predictie(double timpNormal, double timpAccel, boolean risc, double vitezaIntrare) {
+        public Predictie(double timpNormal, double timpAccel, boolean nuPoateOpri) {
             this.timpSosireNormal = timpNormal;
             this.timpSosireDacaAccelereaza = timpAccel;
-            this.riscDerapaj = risc;
-            this.vitezaIntrareNodKmH = vitezaIntrare;
+            this.nuPoateOpriFizic = nuPoateOpri;
         }
     }
 
-    public static Predictie calculeazaCinematica(Vehicle v) {
-        double vInit = v.getVitezaKmH() / 3.6;
-        double aFranare = v.getCapabilitateFranare();
-        double aAccelerare = (v.getGreutateKg() > 3500) ? 1.0 : 3.0; // Grele vs Ușoare
+    public static Predictie calculeazaCinematica(Vehicle v, WeatherCondition vreme) {
+        double vInit = v.getVitezaKmH() / 3.6; // Transformăm în metri/secundă
         double d = v.getDistantaPanaLaNod();
 
-        // Calcul Scenariu Accelerare Maximă: d = v*t + 0.5*a*t^2 => 0.5*a*t^2 + v*t - d = 0
+        // 1. Calculăm factorul de aderență bazat pe vreme
+        double factorAderenta = 1.0; // CLEAR
+        if (vreme == WeatherCondition.RAIN) factorAderenta = 0.7;
+        else if (vreme == WeatherCondition.SNOW) factorAderenta = 0.4;
+
+        // 2. Aplicăm factorul la frânare și accelerare
+        double aFranare = v.getCapabilitateFranareBaza() * factorAderenta;
+        double aAccelerare = ((v.getGreutateKg() > 3500) ? 1.0 : 3.0) * factorAderenta;
+
+        // 3. Timp de sosire la viteza constantă curentă
+        double timpSosireNormal = d / vInit;
+
+        // 4. Timp dacă accelerează (Evaziune)
         double delta = (vInit * vInit) - 4 * (0.5 * aAccelerare) * (-d);
         double timpDacaAccelereaza = (-vInit + Math.sqrt(delta)) / (2 * 0.5 * aAccelerare);
         if (Double.isNaN(timpDacaAccelereaza) || timpDacaAccelereaza < 0) timpDacaAccelereaza = 999;
 
-        // Calcul Scenariu Normal / Frânare
-        double vTarget = (v.getIntentie() == Intention.FATA) ? vInit : (15.0 / 3.6);
+        // 5. Calculăm distanța minimă de oprire: d = v^2 / (2 * a)
+        // Dacă distanța sa până la nod este mai mică, înseamnă că fizic NU mai poate opri, chiar dacă apasă frâna la fund
+        double distantaMinimaOprire = (vInit * vInit) / (2 * aFranare);
+        boolean nuPoateOpri = (d < distantaMinimaOprire);
 
-        if (vInit <= vTarget) {
-            return new Predictie(d / vInit, timpDacaAccelereaza, false, vInit * 3.6);
-        }
-
-        double dNecesar = (vInit * vInit - vTarget * vTarget) / (2 * aFranare);
-        if (d >= dNecesar) {
-            double timpFranare = (vInit - vTarget) / aFranare;
-            double timpRulareConstanta = (d - dNecesar) / vTarget;
-            return new Predictie(timpFranare + timpRulareConstanta, timpDacaAccelereaza, false, vTarget * 3.6);
-        } else {
-            // Intră prea tare!
-            double vIntrare = Math.sqrt(vInit * vInit - 2 * aFranare * d);
-            double timpFranare = (vInit - vIntrare) / aFranare;
-            return new Predictie(timpFranare, timpDacaAccelereaza, true, vIntrare * 3.6);
-        }
+        return new Predictie(timpSosireNormal, timpDacaAccelereaza, nuPoateOpri);
     }
 }

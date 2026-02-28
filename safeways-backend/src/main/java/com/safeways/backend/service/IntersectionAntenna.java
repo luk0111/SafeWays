@@ -1,5 +1,6 @@
 package com.safeways.backend.service;
 
+import com.safeways.backend.model.WeatherCondition;
 import com.safeways.backend.model.vehicle.Vehicle;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -17,6 +18,9 @@ public class IntersectionAntenna {
     private List<Vehicle> vehiculeInRaza = new ArrayList<>();
     private String nodeId = "Nod_Principal";
 
+    // Setăm vremea la nivelul antenei (putem simula ploaia)
+    private WeatherCondition vremeCurenta = WeatherCondition.RAIN;
+
     public void primesteSemnal(Vehicle v) { vehiculeInRaza.add(v); }
 
     public CompletableFuture<String> proceseazaTraficul() {
@@ -27,7 +31,8 @@ public class IntersectionAntenna {
 
         List<CollisionPredictor.Predictie> predictii = new ArrayList<>();
         for (Vehicle v : vehiculeInRaza) {
-            predictii.add(CollisionPredictor.calculeazaCinematica(v));
+            // Trimitem și starea vremii către predictorul fizic
+            predictii.add(CollisionPredictor.calculeazaCinematica(v, vremeCurenta));
         }
 
         boolean pericolColiziune = false;
@@ -43,15 +48,20 @@ public class IntersectionAntenna {
             return CompletableFuture.completedFuture("[\"Vehiculele au distanțare sigură (\u003E2s). AI offline.\"]");
         }
 
-        StringBuilder contextBatch = new StringBuilder("ALARMĂ COLIZIUNE!\n\n");
+        // --- CONSTRUIM PROMPT-UL PENTRU AI ---
+        StringBuilder contextBatch = new StringBuilder("ALARMĂ COLIZIUNE!\n");
+        contextBatch.append("Condiții meteo în intersecție: ").append(vremeCurenta).append("\n\n");
+
         for (int i = 0; i < vehiculeInRaza.size(); i++) {
             Vehicle v = vehiculeInRaza.get(i);
             CollisionPredictor.Predictie p = predictii.get(i);
 
-            contextBatch.append(String.format("- ID: %s (%s, %.0fkg) | Intenție: %s\n", v.getId(), v.getTipVehicul(), v.getGreutateKg(), v.getIntentie()));
-            contextBatch.append(String.format("  Timp Sosire Normal: %.1fs | Dacă accelerează max: %.1fs\n", p.timpSosireNormal, p.timpSosireDacaAccelereaza));
-            if (p.riscDerapaj) {
-                contextBatch.append(String.format("  CRITIC: Intră cu %.0f km/h în viraj!\n", p.vitezaIntrareNodKmH));
+            contextBatch.append(String.format("- ID: %s (%s, %.0fkg)\n", v.getId(), v.getTipVehicul(), v.getGreutateKg()));
+            contextBatch.append(String.format("  Viteza: %.0f km/h | Distanța: %.1fm\n", v.getVitezaKmH(), v.getDistantaPanaLaNod()));
+            contextBatch.append(String.format("  Timp Sosire: %.1fs | Dacă accelerează max: %.1fs\n", p.timpSosireNormal, p.timpSosireDacaAccelereaza));
+
+            if (p.nuPoateOpriFizic) {
+                contextBatch.append("  CRITIC: Din cauza vremii și a vitezei, acest vehicul NU mai are spațiu fizic să oprească până la intersecție!\n");
             }
         }
 
