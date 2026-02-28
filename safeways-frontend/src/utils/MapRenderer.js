@@ -163,13 +163,13 @@ export class MapRenderer {
         const visibleMinY = Math.min(mapYAtTop, mapYAtBottom) - marginY;
         const visibleMaxY = Math.max(mapYAtTop, mapYAtBottom) + marginY;
 
-        // --- 1. DESENAREA STRĂZILOR (Asfalt + Linii de sens - SUBȚIRE ȘI FIN) ---
+        // --- 1. DESENAREA STRĂZILOR (Asfalt Modern + Marcaje Fine) ---
 
-        // AM REDUS GROSIMEA: Baza pleacă de la 2px, și crește foarte puțin cu zoom-ul
-        const roadWidth = Math.max(2, 6 * zoom);
+// Define standard road width that scales slightly with zoom for a clean look
+        const roadWidth = Math.max(3, 8 * zoom);
 
-        // a) STRATUL 1: Baza drumului (Asfaltul) - Acum mult mai subțire
-        ctx.strokeStyle = '#64748b'; // Gri-asfalt elegant
+// a) STRATUL DE ASFALT: Soft Slate Blue/Grey for a modern UI look
+        ctx.strokeStyle = '#475569'; // Modern slate color
         ctx.lineWidth = roadWidth;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -180,7 +180,7 @@ export class MapRenderer {
             const toNode = mapData.nodesDict[arc.to];
 
             if (fromNode && toNode) {
-                // Culling (Optimizare)
+                // Viewport Culling logic remains active to maintain performance
                 if (
                     (fromNode.longitude < visibleMinX && toNode.longitude < visibleMinX) ||
                     (fromNode.longitude > visibleMaxX && toNode.longitude > visibleMaxX) ||
@@ -195,15 +195,13 @@ export class MapRenderer {
         });
         ctx.stroke();
 
-        // b) STRATUL 2: Marcajele rutiere (Liniile punctate - DISCRETE)
-        // Le afișăm doar la zoom foarte mare
-        if (zoom > 2.0) {
-            ctx.strokeStyle = '#ffffff'; // Culoarea marcajului (Alb)
-            // Lățimea e microscopică comparativ cu lățimea străzii
-            ctx.lineWidth = Math.max(0.1, 0.5 * zoom);
+// b) MARCAJE RUTIERE: Discrete dashed lines visible only when zoomed in
+        if (zoom > 1.5) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; // Semi-transparent white
+            ctx.lineWidth = Math.max(0.5, 1 * zoom);
 
-            // Creăm un efect discret
-            ctx.setLineDash([12 * zoom, 15 * zoom]);
+            // Create a rhythmic dash pattern that scales with zoom
+            ctx.setLineDash([15 * zoom, 20 * zoom]);
 
             ctx.beginPath();
             mapData.arcs.forEach(arc => {
@@ -211,21 +209,13 @@ export class MapRenderer {
                 const toNode = mapData.nodesDict[arc.to];
 
                 if (fromNode && toNode) {
-                    if (
-                        (fromNode.longitude < visibleMinX && toNode.longitude < visibleMinX) ||
-                        (fromNode.longitude > visibleMaxX && toNode.longitude > visibleMaxX) ||
-                        (fromNode.latitude < visibleMinY && toNode.latitude < visibleMinY) ||
-                        (fromNode.latitude > visibleMaxY && toNode.latitude > visibleMaxY)
-                    ) {
-                        return;
-                    }
                     ctx.moveTo(getCanvasX(fromNode.longitude), getCanvasY(fromNode.latitude));
                     ctx.lineTo(getCanvasX(toNode.longitude), getCanvasY(toNode.latitude));
                 }
             });
             ctx.stroke();
 
-            // IMPORTANT: Resetăm setLineDash!
+            // Reset dash pattern so it doesn't affect other elements
             ctx.setLineDash([]);
         }
         // --- 2. DESENAREA INTERSECȚIILOR (Albastru Transparent) ---
