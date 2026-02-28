@@ -36,13 +36,14 @@ public class AiDecisionService {
                     %s
                     
                     Returnează STRICT un ARRAY JSON. Structura:
-                    [
-                      {
-                        "vehicleId": "ID",
-                        "actiune": "CONTINUA" | "OPRESTE" | "INCETINESTE" | "ACCELEREAZA",
-                        "motiv": "explicație bazată pe fizică"
-                      }
-                    ]
+                     [
+                       {
+                         "vehicleId": "ID",
+                         "actiune": "CONTINUA" | "OPRESTE" | "INCETINESTE" | "ACCELEREAZA",
+                         "vitezaTintaKmH": 0, // Pune viteza recomandată AICI (ex: 20 pentru INCETINESTE, 0 pentru OPRESTE)
+                         "motiv": "explicație bazată pe fizică"
+                       }
+                     ]
                     """.formatted(intersectionId, batchContext);
             try {
                 return qwenModel.generate(prompt).trim();

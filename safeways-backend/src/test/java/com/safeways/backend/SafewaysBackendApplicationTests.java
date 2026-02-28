@@ -31,8 +31,7 @@ class SafewaysBackendApplicationTests {
 
 		// 3. Apelăm funcția din serviciul nostru
 		long startTime = System.currentTimeMillis();
-		String jsonResult = aiDecisionService.decideAction(vehicleId, situatieTrafic);
-		long stopTime = System.currentTimeMillis();
+		String jsonResult = aiDecisionService.decideForIntersectionBatchAsync("Nod_" + vehicleId, situatieTrafic).join();		long stopTime = System.currentTimeMillis();
 
 		// 4. Afișăm rezultatul frumos în consolă
 		System.out.println("\n✅ Răspuns generat în " + (stopTime - startTime) + " milisecunde!");
