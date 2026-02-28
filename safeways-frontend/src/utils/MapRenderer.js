@@ -23,7 +23,10 @@ export class MapRenderer {
         this.animationFrameId = null;
         this.isAnimating = false;
 
-        this.decorations = []; // Stocăm pozițiile copacilor
+        this.decorations = [];
+        this.buildings = [];
+        this.urbanDetails = [];
+        this.processedArcs = []; // Pre-processed arcs for better rendering
         this.initListeners();
     }
 
@@ -65,33 +68,206 @@ export class MapRenderer {
 
         if (dataChanged) {
             this.generateDecorations();
+            this.processArcs();
         }
         this.startAnimation();
     }
 
+    /**
+     * Pre-process arcs to organize by road type for proper layered rendering
+     */
+    processArcs() {
+        if (!this.mapData || !this.mapData.arcs) return;
+
+        // Road type hierarchy (draw order - lower types drawn first)
+        const typeOrder = {
+            'service': 0,
+            'residential': 1,
+            'living_street': 2,
+            'unclassified': 2,
+            'tertiary': 3,
+            'secondary': 4,
+            'primary': 5,
+            'pedestrian': 3,
+            'road': 2
+        };
+
+        // Road widths by type
+        const typeWidths = {
+            'primary': 1.4,
+            'secondary': 1.2,
+            'tertiary': 1.0,
+            'residential': 0.8,
+            'living_street': 0.7,
+            'service': 0.6,
+            'pedestrian': 0.9,
+            'unclassified': 0.8,
+            'road': 0.8
+        };
+
+        this.processedArcs = this.mapData.arcs.map(arc => ({
+            ...arc,
+            order: typeOrder[arc.type] || 2,
+            widthFactor: typeWidths[arc.type] || 0.8
+        })).sort((a, b) => a.order - b.order);
+    }
+
     generateDecorations() {
         this.decorations = [];
+        this.buildings = [];
+        this.urbanDetails = [];
+
         if (!this.mapData || !this.boundingBox) return;
         const { minX, maxX, minY, maxY } = this.boundingBox;
-        const treeCount = 400;
 
+        // Build a quick lookup of road segments for collision detection
+        const roadSegments = [];
+        if (this.mapData.arcs) {
+            this.mapData.arcs.forEach(arc => {
+                const f = this.mapData.nodesDict[arc.from];
+                const t = this.mapData.nodesDict[arc.to];
+                if (f && t) {
+                    roadSegments.push({ x1: f.longitude, y1: f.latitude, x2: t.longitude, y2: t.latitude });
+                }
+            });
+        }
+
+        // Distance from point to line segment
+        const distToSegment = (px, py, seg) => {
+            const dx = seg.x2 - seg.x1;
+            const dy = seg.y2 - seg.y1;
+            const len2 = dx * dx + dy * dy;
+            if (len2 === 0) return Math.sqrt((px - seg.x1) ** 2 + (py - seg.y1) ** 2);
+
+            let t = ((px - seg.x1) * dx + (py - seg.y1) * dy) / len2;
+            t = Math.max(0, Math.min(1, t));
+
+            const nearX = seg.x1 + t * dx;
+            const nearY = seg.y1 + t * dy;
+            return Math.sqrt((px - nearX) ** 2 + (py - nearY) ** 2);
+        };
+
+        // Scale factor for the bounding box (geo coords are small numbers)
+        const rangeX = maxX - minX;
+        const rangeY = maxY - minY;
+        const roadBuffer = Math.max(rangeX, rangeY) * 0.012;
+        const buildingBuffer = Math.max(rangeX, rangeY) * 0.025;
+
+        // Helper to check if a point is safe from roads
+        const isSafeFromRoads = (x, y, minDist) => {
+            for (const seg of roadSegments) {
+                if (distToSegment(x, y, seg) < minDist) return false;
+            }
+            return true;
+        };
+
+        // 1. Generate Buildings (rectangular blocks near roads)
+        const buildingCount = 60;
+        for (let i = 0; i < buildingCount; i++) {
+            const bx = minX + Math.random() * (maxX - minX);
+            const by = minY + Math.random() * (maxY - minY);
+
+            // Buildings should be close to roads but not on them
+            let nearRoad = false;
+            let tooClose = false;
+            for (const seg of roadSegments) {
+                const dist = distToSegment(bx, by, seg);
+                if (dist < roadBuffer) tooClose = true;
+                if (dist < buildingBuffer && dist > roadBuffer) nearRoad = true;
+            }
+
+            if (nearRoad && !tooClose) {
+                const width = (0.3 + Math.random() * 0.5) * rangeX * 0.03;
+                const height = (0.3 + Math.random() * 0.5) * rangeY * 0.03;
+                const rotation = Math.random() * Math.PI * 0.1 - 0.05;
+
+                this.buildings.push({
+                    x: bx, y: by,
+                    width, height,
+                    rotation,
+                    color: ['#e8e8e8', '#e0e0e0', '#d8d8d8', '#f0f0f0'][Math.floor(Math.random() * 4)],
+                    shadowColor: 'rgba(0,0,0,0.08)'
+                });
+            }
+        }
+
+        // 2. Generate Trees (clustered, more natural)
+        const treeCount = 120;
         for (let i = 0; i < treeCount; i++) {
             const tx = minX + Math.random() * (maxX - minX);
             const ty = minY + Math.random() * (maxY - minY);
 
-            let isSafe = true;
-            for (const nodeId in this.mapData.nodesDict) {
-                const node = this.mapData.nodesDict[nodeId];
-                const dist = Math.sqrt(Math.pow(tx - node.longitude, 2) + Math.pow(ty - node.latitude, 2));
-                // Păstrăm distanța de siguranță față de drumuri
-                if (dist < 150) { isSafe = false; break; }
-            }
+            if (isSafeFromRoads(tx, ty, roadBuffer * 1.2)) {
+                // Cluster trees together
+                const isCluster = Math.random() > 0.7;
+                const baseSize = 2 + Math.random() * 3;
 
-            if (isSafe) {
                 this.decorations.push({
+                    type: 'tree',
                     x: tx, y: ty,
-                    size: 4 + Math.random() * 8, // Copaci mici, cum erau inițial
-                    color: ['#2d5a27', '#1e3f1a', '#3a6d32'][Math.floor(Math.random() * 3)]
+                    size: baseSize,
+                    color: ['#5a8f5d', '#4a7c4e', '#3d6b40', '#6b9e6e'][Math.floor(Math.random() * 4)]
+                });
+
+                // Add nearby trees for clusters
+                if (isCluster) {
+                    for (let j = 0; j < 2 + Math.floor(Math.random() * 3); j++) {
+                        const cx = tx + (Math.random() - 0.5) * rangeX * 0.015;
+                        const cy = ty + (Math.random() - 0.5) * rangeY * 0.015;
+                        if (isSafeFromRoads(cx, cy, roadBuffer)) {
+                            this.decorations.push({
+                                type: 'tree',
+                                x: cx, y: cy,
+                                size: baseSize * (0.6 + Math.random() * 0.5),
+                                color: ['#5a8f5d', '#4a7c4e', '#3d6b40'][Math.floor(Math.random() * 3)]
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Generate small urban details (benches, lights along roads)
+        roadSegments.forEach((seg, idx) => {
+            if (Math.random() > 0.4) return; // Only some roads get details
+
+            const midX = (seg.x1 + seg.x2) / 2;
+            const midY = (seg.y1 + seg.y2) / 2;
+            const dx = seg.x2 - seg.x1;
+            const dy = seg.y2 - seg.y1;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len === 0) return;
+
+            // Perpendicular offset
+            const perpX = -dy / len * roadBuffer * 1.5;
+            const perpY = dx / len * roadBuffer * 1.5;
+
+            // Street lights on both sides
+            if (Math.random() > 0.5) {
+                this.urbanDetails.push({
+                    type: 'streetlight',
+                    x: midX + perpX,
+                    y: midY + perpY
+                });
+                this.urbanDetails.push({
+                    type: 'streetlight',
+                    x: midX - perpX,
+                    y: midY - perpY
+                });
+            }
+        });
+
+        // 4. Generate small park areas
+        const parkCount = 3;
+        for (let i = 0; i < parkCount; i++) {
+            const px = minX + rangeX * 0.15 + Math.random() * rangeX * 0.7;
+            const py = minY + rangeY * 0.15 + Math.random() * rangeY * 0.7;
+
+            if (isSafeFromRoads(px, py, buildingBuffer)) {
+                this.urbanDetails.push({
+                    type: 'park',
+                    x: px, y: py,
+                    radius: rangeX * (0.015 + Math.random() * 0.01)
                 });
             }
         }
@@ -148,106 +324,196 @@ export class MapRenderer {
         const getX = (mx) => offsetX + (mx - boundingBox.minX) * finalScale;
         const getY = (my) => canvas.height - (offsetY + (my - boundingBox.minY) * finalScale);
 
-        // 2. DECORAȚIUNI (Copacii verzi de dinainte)
+        // 2a. PARK AREAS (soft green patches)
+        if (this.urbanDetails) {
+            this.urbanDetails.filter(d => d.type === 'park').forEach(park => {
+                const px = getX(park.x);
+                const py = getY(park.y);
+                const radius = park.radius * finalScale;
+
+                // Soft gradient park
+                const gradient = ctx.createRadialGradient(px, py, 0, px, py, radius);
+                gradient.addColorStop(0, 'rgba(134, 188, 134, 0.3)');
+                gradient.addColorStop(0.7, 'rgba(134, 188, 134, 0.15)');
+                gradient.addColorStop(1, 'rgba(134, 188, 134, 0)');
+
+                ctx.beginPath();
+                ctx.arc(px, py, radius, 0, Math.PI * 2);
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            });
+        }
+
+        // 2b. BUILDINGS (subtle rectangular shapes)
+        if (this.buildings) {
+            ctx.save();
+            this.buildings.forEach(b => {
+                const bx = getX(b.x);
+                const by = getY(b.y);
+                const w = b.width * finalScale;
+                const h = b.height * finalScale;
+
+                ctx.save();
+                ctx.translate(bx, by);
+                ctx.rotate(b.rotation);
+
+                // Building shadow
+                ctx.fillStyle = b.shadowColor;
+                ctx.fillRect(-w/2 + 2, -h/2 + 2, w, h);
+
+                // Building body
+                ctx.fillStyle = b.color;
+                ctx.fillRect(-w/2, -h/2, w, h);
+
+                // Subtle border
+                ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(-w/2, -h/2, w, h);
+
+                ctx.restore();
+            });
+            ctx.restore();
+        }
+
+        // 2c. TREES (natural circles with subtle shadows)
         this.decorations.forEach(d => {
             const dx = getX(d.x);
             const dy = getY(d.y);
+            const size = (d.size || 3) * zoom;
+
+            // Tree shadow
             ctx.beginPath();
-            ctx.arc(dx, dy, d.size * zoom, 0, Math.PI * 2);
+            ctx.arc(dx + 1, dy + 1, size, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(0,0,0,0.08)';
+            ctx.fill();
+
+            // Tree canopy
+            ctx.beginPath();
+            ctx.arc(dx, dy, size, 0, Math.PI * 2);
             ctx.fillStyle = d.color;
             ctx.fill();
-            if (zoom > 2) {
-                ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-                ctx.lineWidth = 0.5;
-                ctx.stroke();
+
+            // Subtle highlight
+            if (zoom > 1.5) {
+                ctx.beginPath();
+                ctx.arc(dx - size * 0.2, dy - size * 0.2, size * 0.3, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                ctx.fill();
             }
         });
 
-        // 3. DRUMURI - Clean modern style
-        const roadW = Math.max(4, 8 * zoom);
-        const casingW = roadW + 2;
+        // 3. DRUMURI - Clean modern style with road hierarchy
+        const baseRoadW = Math.max(3, 6 * zoom);
+        const arcsToRender = this.processedArcs.length > 0 ? this.processedArcs : this.mapData.arcs;
 
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        // Collect all unique intersection points for later
-        const intersectionPoints = new Set();
-        if (mapData.intersections) {
-            mapData.intersections.forEach(n => {
-                intersectionPoints.add(`${n.longitude},${n.latitude}`);
-            });
-        }
-
-        // a) Shadow layer (subtle depth)
+        // a) Shadow/casing layer - draw all roads with subtle shadow
         ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.08)';
-        ctx.shadowBlur = 6;
-        ctx.shadowOffsetY = 2;
-        ctx.strokeStyle = '#e8eaed';
-        ctx.lineWidth = casingW;
-        ctx.beginPath();
-        mapData.arcs.forEach(arc => {
+        ctx.shadowColor = 'rgba(0,0,0,0.06)';
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetY = 1;
+
+        arcsToRender.forEach(arc => {
             const f = mapData.nodesDict[arc.from];
             const t = mapData.nodesDict[arc.to];
             if (f && t) {
+                const w = baseRoadW * (arc.widthFactor || 0.8);
+                ctx.strokeStyle = '#d0d0d0';
+                ctx.lineWidth = w + 2;
+                ctx.beginPath();
                 ctx.moveTo(getX(f.longitude), getY(f.latitude));
                 ctx.lineTo(getX(t.longitude), getY(t.latitude));
+                ctx.stroke();
             }
         });
-        ctx.stroke();
         ctx.restore();
 
-        // b) Road surface (clean white)
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = roadW;
-        ctx.beginPath();
-        mapData.arcs.forEach(arc => {
+        // b) Road surface layer - clean white roads
+        arcsToRender.forEach(arc => {
             const f = mapData.nodesDict[arc.from];
             const t = mapData.nodesDict[arc.to];
             if (f && t) {
+                const w = baseRoadW * (arc.widthFactor || 0.8);
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = w;
+                ctx.beginPath();
                 ctx.moveTo(getX(f.longitude), getY(f.latitude));
                 ctx.lineTo(getX(t.longitude), getY(t.latitude));
+                ctx.stroke();
             }
         });
-        ctx.stroke();
 
-        // c) Center line markings (only when zoomed in)
-        if (zoom > 1.5) {
-            ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = Math.max(0.5, 1 * zoom);
-            ctx.setLineDash([3 * zoom, 8 * zoom]);
-            ctx.beginPath();
-            mapData.arcs.forEach(arc => {
-                const f = mapData.nodesDict[arc.from];
-                const t = mapData.nodesDict[arc.to];
-                if (f && t) {
-                    ctx.moveTo(getX(f.longitude), getY(f.latitude));
-                    ctx.lineTo(getX(t.longitude), getY(t.latitude));
+        // c) Center line markings (only for larger roads when zoomed in)
+        if (zoom > 2) {
+            ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+            ctx.setLineDash([2 * zoom, 6 * zoom]);
+            arcsToRender.forEach(arc => {
+                if ((arc.widthFactor || 0.8) >= 1.0) {
+                    const f = mapData.nodesDict[arc.from];
+                    const t = mapData.nodesDict[arc.to];
+                    if (f && t) {
+                        ctx.lineWidth = Math.max(0.5, 0.8 * zoom);
+                        ctx.beginPath();
+                        ctx.moveTo(getX(f.longitude), getY(f.latitude));
+                        ctx.lineTo(getX(t.longitude), getY(t.latitude));
+                        ctx.stroke();
+                    }
                 }
             });
-            ctx.stroke();
             ctx.setLineDash([]);
         }
 
         // 4. INTERSECȚII - Clean circular nodes
-        if (mapData.intersections) {
-            // Draw intersection fills to cover road overlap
+        if (mapData.intersections && mapData.intersections.length > 0) {
+            // Draw intersection fills to cover road overlaps
             ctx.fillStyle = '#ffffff';
             mapData.intersections.forEach(n => {
                 ctx.beginPath();
-                ctx.arc(getX(n.longitude), getY(n.latitude), roadW * 0.6, 0, Math.PI * 2);
+                ctx.arc(getX(n.longitude), getY(n.latitude), baseRoadW * 0.5, 0, Math.PI * 2);
                 ctx.fill();
             });
 
             // Draw subtle intersection markers
-            ctx.fillStyle = 'rgba(66, 133, 244, 0.15)';
-            ctx.strokeStyle = 'rgba(66, 133, 244, 0.3)';
-            ctx.lineWidth = 1.5;
+            ctx.fillStyle = 'rgba(66, 133, 244, 0.12)';
+            ctx.strokeStyle = 'rgba(66, 133, 244, 0.25)';
+            ctx.lineWidth = 1;
             mapData.intersections.forEach(n => {
                 ctx.beginPath();
-                ctx.arc(getX(n.longitude), getY(n.latitude), roadW * 0.4, 0, Math.PI * 2);
+                ctx.arc(getX(n.longitude), getY(n.latitude), baseRoadW * 0.35, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
+            });
+        }
+
+        // 4b. STREET LIGHTS (small decorative elements along roads)
+        if (this.urbanDetails && zoom > 0.8) {
+            this.urbanDetails.filter(d => d.type === 'streetlight').forEach(light => {
+                const lx = getX(light.x);
+                const ly = getY(light.y);
+                const lightSize = Math.max(1.5, 2.5 * zoom);
+
+                // Light glow (subtle)
+                const glowGradient = ctx.createRadialGradient(lx, ly, 0, lx, ly, lightSize * 3);
+                glowGradient.addColorStop(0, 'rgba(255, 248, 220, 0.25)');
+                glowGradient.addColorStop(1, 'rgba(255, 248, 220, 0)');
+                ctx.beginPath();
+                ctx.arc(lx, ly, lightSize * 3, 0, Math.PI * 2);
+                ctx.fillStyle = glowGradient;
+                ctx.fill();
+
+                // Light pole dot
+                ctx.beginPath();
+                ctx.arc(lx, ly, lightSize, 0, Math.PI * 2);
+                ctx.fillStyle = '#666666';
+                ctx.fill();
+
+                // Light bulb
+                ctx.beginPath();
+                ctx.arc(lx, ly, lightSize * 0.6, 0, Math.PI * 2);
+                ctx.fillStyle = '#fffef0';
+                ctx.fill();
             });
         }
 
