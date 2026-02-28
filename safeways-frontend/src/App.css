@@ -68,6 +68,12 @@ body {
   color: #6b7280;
 }
 
+.status-indicators {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .status-indicator {
   display: flex;
   align-items: center;
@@ -77,6 +83,16 @@ body {
   padding: 8px 16px;
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+.status-indicator.offline {
+  background: rgba(156, 163, 175, 0.15);
+  color: #9ca3af;
+  border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+.status-indicator.offline .dot {
+  background-color: #9ca3af;
 }
 
 .dot { width: 8px; height: 8px; background-color: #10b981; border-radius: 50%; display: inline-block; margin-right: 10px; }

@@ -107,9 +107,15 @@ function App() {
                 <div className="left-panel glass-panel">
                     <header className="dashboard-header">
                         <h1>SafeWays <span>AI-Powered Safe Driving Assistant</span></h1>
-                        <div className="status-indicator">
-                            <span className="dot pulse"></span>
-                            V2X Active
+                        <div className="status-indicators">
+                            <div className="status-indicator">
+                                <span className="dot pulse"></span>
+                                V2X Active
+                            </div>
+                            <div className="status-indicator offline">
+                                <span className="dot"></span>
+                                V2V Fallback
+                            </div>
                         </div>
                     </header>
                     <div className="map-section">
