@@ -14,7 +14,7 @@ public class V2xMessage {
     private Position position;
 
     // Intenția mapată automat la Enum-ul nostru
-    private com.safeways.backend.model.Intention intention;
+    private model.Intention intention;
 
     private String status;
 

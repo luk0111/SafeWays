@@ -1,35 +1,27 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React, { useState, useEffect } from 'react';
+import { createV2xClient } from './services/v2xService';
+import IntersectionMap from './components/IntersectionMap';
 
 function App() {
-  const [count, setCount] = useState(0)
+    const [vehicles, setVehicles] = useState([
+        { id: 'Masina-1', type: 'NORMAL', x: 100, y: 100, speed: 50, intention: 'FATA' }
+    ]);
 
-  return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    useEffect(() => {
+        const client = createV2xClient((decision) => {
+            console.log("Decizie AI primită:", decision);
+            // Aici aplicăm decizia (FRÂNEAZĂ/ACCELEREAZĂ) în animație
+        });
+        client.activate();
+        return () => client.deactivate();
+    }, []);
+
+    return (
+        <div className="App">
+            <h1>SafeWays V2X Dashboard</h1>
+            <IntersectionMap vehicles={vehicles} />
+        </div>
+    );
 }
 
-export default App
+export default App;
