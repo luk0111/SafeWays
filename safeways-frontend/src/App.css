@@ -239,11 +239,13 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-
+  margin-bottom: 10px;
   /* Aici am adăugat tranziția fină pentru animație */
   transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
-
+.map-controls button:last-child {
+  margin-bottom: 0;
+}
 /* Animația efectivă la hover (identică cu Media Player) */
 .map-controls button:hover {
   background: #f3f4f6;
