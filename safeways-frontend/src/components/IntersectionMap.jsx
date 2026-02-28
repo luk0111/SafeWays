@@ -63,13 +63,13 @@ const IntersectionMap = ({ vehicles }) => {
                 const rawIntersections = [];
                 Object.keys(nodeConnections).forEach(nodeId => {
                     // Nodurile cu >= 3 conexiuni sunt considerate intersecții de bază
-                    if (nodeConnections[nodeId] >= 3 && nodesDictionary[nodeId]) {
+                    if (nodeConnections[nodeId] >= 6 && nodesDictionary[nodeId]) {
                         rawIntersections.push(nodesDictionary[nodeId]);
                     }
                 });
 
                 // 2. Aplicăm Clustering Spațial
-                const CLUSTER_THRESHOLD = 0.0004; // Distanța de unire (ajustează dacă e nevoie)
+                const CLUSTER_THRESHOLD = 100; // Distanța de unire (ajustează dacă e nevoie)
                 const clusteredIntersections = [];
 
                 rawIntersections.forEach(node => {
