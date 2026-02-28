@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 
+import java.util.concurrent.CompletableFuture;
+
 @Service
 public class AiDecisionService {
 
@@ -16,62 +18,37 @@ public class AiDecisionService {
 
     @PostConstruct
     public void init() {
-        System.out.println("🤖 Inițializare conexiune AI către: http://" + ollamaHost + ":11434");
-
         this.qwenModel = OllamaChatModel.builder()
                 .baseUrl("http://" + ollamaHost + ":11434")
                 .modelName("qwen2.5:7b")
-                .temperature(0.0) // 0.0 este ideal pentru decizii stricte, logice
-                .format("json")   // MAGIC WORD: Forțează modelul să răspundă doar în JSON
+                .temperature(0.0)
+                .format("json")
                 .build();
-
-        // Facem un test automat chiar când pornește aplicația Spring Boot
-        testAiConnection();
     }
 
-    /**
-     * Testează rapid conexiunea la startup pentru a te asigura că JSON-ul merge.
-     */
-    private void testAiConnection() {
-        System.out.println("⏳ Testăm conexiunea cu Qwen 2.5 (Cerem un JSON de test)...");
-        String testPrompt = "Ești un asistent de test. Generează exact acest JSON și nimic altceva: { \"status\": \"AI Conectat\", \"viteza_ms\": 100 }";
-
-        try {
-            long startTime = System.currentTimeMillis();
-            String response = qwenModel.generate(testPrompt);
-            long endTime = System.currentTimeMillis();
-
-            System.out.println("✅ Conexiune AI reușită în " + (endTime - startTime) + " ms!");
-            System.out.println("📦 Răspuns primit (JSON pur): \n" + response);
-        } catch (Exception e) {
-            System.err.println("❌ Eroare la testarea conexiunii AI! Verifică dacă Ollama rulează.");
-        }
-    }
-
-    /**
-     * Metoda principala pe care o apelam pentru fiecare masina din intersecție
-     */
-    public String decideAction(String vehicleId, String contextV2x) {
-        // Folosim Text Blocks (""") din Java pentru a scrie un prompt clar
-        String prompt = """
-                Ești sistemul central de siguranță V2X. Analizează situația pentru vehiculul %s.
-                Situație trafic: %s
-                
-                Returnează decizia ta STRICT în format JSON, folosind exact această structură:
-                {
-                  "actiune": "ACCELEREAZA" | "FRANEAZA" | "ASTEAPTA",
-                  "motiv": "explicație scurtă a deciziei"
-                }
-                """.formatted(vehicleId, contextV2x);
-
-        try {
-            // Trimitem datele la modelul Qwen
-            String decisionJson = qwenModel.generate(prompt);
-            return decisionJson.trim();
-        } catch (Exception e) {
-            System.err.println("⚠️ Eroare comunicare cu AI pentru " + vehicleId + ". Trecere pe avarie!");
-            // Acum Fallback-ul trebuie să fie tot un JSON valid, ca să nu crape aplicația
-            return "{ \"actiune\": \"FRANEAZA\", \"motiv\": \"Eroare conexiune AI sau Timeout\" }";
-        }
+    public CompletableFuture<String> decideForIntersectionBatchAsync(String intersectionId, String batchContext) {
+        return CompletableFuture.supplyAsync(() -> {
+            String prompt = """
+                    Ești sistemul de decizie V2X pentru intersecția %s.
+                    Analizează situația vehiculelor (timpul sosirii dacă mențin ruta și timpul dacă accelerează la maximum).
+                    
+                    Situație:
+                    %s
+                    
+                    Returnează STRICT un ARRAY JSON. Structura:
+                    [
+                      {
+                        "vehicleId": "ID",
+                        "actiune": "CONTINUA" | "OPRESTE" | "INCETINESTE" | "ACCELEREAZA",
+                        "motiv": "explicație bazată pe fizică"
+                      }
+                    ]
+                    """.formatted(intersectionId, batchContext);
+            try {
+                return qwenModel.generate(prompt).trim();
+            } catch (Exception e) {
+                return "[]";
+            }
+        });
     }
 }
