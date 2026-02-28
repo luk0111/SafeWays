@@ -593,13 +593,23 @@ export class MapRenderer {
             const antennaX = getX(antenna.longitude);
             const antennaY = getY(antenna.latitude);
 
-            // Fixed screen size - 50m coverage area
-            const antennaRadius = 50;
+            // Fixed screen size - ~50m coverage area
+            const antennaRadius = 51;
             const antennaLineWidth = 2;
 
-            // Calculate live stats from vehicles
-            const vehiclesInRange = vehicles.length;
-            const speedingVehicles = vehicles.filter(v => v.speed > 50).length;
+            // Antenna range in coordinate units (~50m ≈ 0.00045 degrees)
+            const antennaRangeCoords = 0.00045;
+
+            // Calculate which vehicles are actually within antenna range (using coordinate distance)
+            const vehiclesInRangeList = vehicles.filter(v => {
+                const dx = v.x - antenna.longitude;
+                const dy = v.y - antenna.latitude;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                return distance <= antennaRangeCoords;
+            });
+
+            const vehiclesInRange = vehiclesInRangeList.length;
+            const speedingVehicles = vehiclesInRangeList.filter(v => v.speed > 50).length;
             const hasSpeedingVehicles = speedingVehicles > 0;
 
             // Draw antenna sphere - changes color if speeding vehicles detected

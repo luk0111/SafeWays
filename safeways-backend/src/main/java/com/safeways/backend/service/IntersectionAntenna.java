@@ -24,11 +24,11 @@ public class IntersectionAntenna {
     // Weather condition at antenna level (can simulate rain)
     private WeatherCondition currentWeather = WeatherCondition.RAIN;
 
-    // Antenna coverage area - 50m radius (in coordinate units: 50m ≈ 0.00045 degrees)
-    private static final double ANTENNA_RANGE = 0.00045;
+    // Antenna coverage area - ~50m radius
+    private static final double ANTENNA_RANGE = 0.00045; // ~50m in coordinate units
 
     // Collision detection parameters
-    private static final double COLLISION_RADIUS = 0.00045; // 50m in coordinate units
+    private static final double COLLISION_RADIUS = 0.00045; // ~50m in coordinate units
     private static final double TIME_HORIZON_SECONDS = 5.0;
 
     // Speed limit threshold (km/h) - hardcoded at 50
@@ -89,7 +89,7 @@ public class IntersectionAntenna {
      * Get the antenna range in meters
      */
     public double getAntennaRangeMeters() {
-        return 50.0; // 50m range
+        return 50.0; // ~50m range
     }
 
     /**
