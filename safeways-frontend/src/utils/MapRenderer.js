@@ -621,24 +621,41 @@ export class MapRenderer {
                 const vx = getX(v.x);
                 const vy = getY(v.y);
                 const carImg = v.isCurrentUser ? images.userCar : images.otherCar;
-                const s = 45 * Math.max(0.6, Math.min(zoom, 1.2));
+                const s = 35 * Math.max(0.6, Math.min(zoom, 1.2));
 
-                ctx.shadowColor = 'rgba(0,0,0,0.2)';
-                ctx.shadowBlur = 8;
-                if (carImg) ctx.drawImage(carImg, vx - s/2, vy - s/2, s, s);
+                ctx.save();
+                ctx.translate(vx, vy);
+
+                if (typeof v.rotation === 'number') {
+                    ctx.rotate(-v.rotation);
+                }
+
+                ctx.shadowColor = 'rgba(0,0,0,0.25)';
+                ctx.shadowBlur = 6;
+                ctx.shadowOffsetY = 2;
+
+                if (carImg) {
+                    ctx.drawImage(carImg, -s/2, -s/2, s, s);
+                }
+
+                ctx.restore();
+
                 ctx.shadowBlur = 0;
+                ctx.font = '500 10px "Inter", sans-serif';
+                const label = v.id;
+                const tw = ctx.measureText(label).width;
 
-                ctx.font = '600 12px "Inter", sans-serif';
-                const tw = ctx.measureText(v.id).width;
-                ctx.fillStyle = 'white';
-                if(ctx.roundRect) {
+                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                if (ctx.roundRect) {
                     ctx.beginPath();
-                    ctx.roundRect(vx + 22, vy - 13, tw + 20, 26, 13);
+                    ctx.roundRect(vx - tw/2 - 6, vy + s/2 + 4, tw + 12, 16, 8);
                     ctx.fill();
                 }
+
                 ctx.fillStyle = '#3c4043';
-                ctx.textAlign = 'left';
-                ctx.fillText(v.id, vx + 32, vy + 4);
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillText(label, vx, vy + s/2 + 7);
             });
         }
 

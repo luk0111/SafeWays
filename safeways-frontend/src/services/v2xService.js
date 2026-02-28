@@ -1,14 +1,15 @@
 import { Client } from '@stomp/stompjs';
 
-// Aceasta clasa implementeaza capacitatea de perceptie prin mesaje V2X [cite: 7]
-export const createV2xClient = (onMessageReceived) => {
+export const createV2xClient = (onDecisionReceived, onVehiclesReceived) => {
     const client = new Client({
-        brokerURL: 'ws://localhost:6767/v2x-stream', // URL-ul setat în Java
+        brokerURL: 'ws://localhost:6767/v2x-stream',
         onConnect: () => {
             console.log('✅ Conectat la canalul V2X');
-            // Ne abonăm la deciziile luate de AI [cite: 11]
             client.subscribe('/topic/decisions', (message) => {
-                onMessageReceived(JSON.parse(message.body));
+                if (onDecisionReceived) onDecisionReceived(JSON.parse(message.body));
+            });
+            client.subscribe('/topic/vehicles', (message) => {
+                if (onVehiclesReceived) onVehiclesReceived(JSON.parse(message.body));
             });
         },
         onStompError: (frame) => {

@@ -1,17 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { MapRenderer } from '../utils/MapRenderer';
 import { fetchBrasovMapData, calculateBoundingBox } from '../services/osmService';
+import { VehicleSimulation } from '../services/vehicleSimulation';
+import { createV2xClient } from '../services/v2xService';
 
-const IntersectionMap = ({ vehicles }) => {
+const IntersectionMap = ({ useBackendSimulation = false }) => {
     const canvasRef = useRef(null);
     const rendererRef = useRef(null);
+    const simulationRef = useRef(null);
+    const lastTimeRef = useRef(0);
+    const animationRef = useRef(null);
+    const v2xClientRef = useRef(null);
 
     const [mapData, setMapData] = useState(null);
     const [boundingBox, setBoundingBox] = useState({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
     const [images, setImages] = useState({ loaded: false, userCar: null, otherCar: null });
     const [mapSource, setMapSource] = useState('Loading...');
+    const [vehicles, setVehicles] = useState([]);
 
-    // 1. Preluarea datelor și imaginilor (se rulează o singură dată)
     useEffect(() => {
         let isMounted = true;
 
@@ -36,7 +42,6 @@ const IntersectionMap = ({ vehicles }) => {
             }
         });
 
-        // Fetch map data for Brasov, Romania
         fetchBrasovMapData()
             .then(data => {
                 if (isMounted) {
@@ -55,14 +60,12 @@ const IntersectionMap = ({ vehicles }) => {
         };
     }, []);
 
-    // 2. Inițializarea Motorului de Randare a Hărții (MapRenderer)
     useEffect(() => {
         if (canvasRef.current && !rendererRef.current) {
             rendererRef.current = new MapRenderer(canvasRef.current);
         }
 
         return () => {
-            // Cleanup renderer on unmount
             if (rendererRef.current) {
                 rendererRef.current.destroy?.();
                 rendererRef.current = null;
@@ -70,7 +73,54 @@ const IntersectionMap = ({ vehicles }) => {
         };
     }, []);
 
-    // 3. Trimiterea datelor actualizate către clasa de randare
+    useEffect(() => {
+        if (!mapData) return;
+
+        if (useBackendSimulation) {
+            v2xClientRef.current = createV2xClient(
+                (decision) => console.log("AI Decision:", decision),
+                (backendVehicles) => setVehicles(backendVehicles)
+            );
+            v2xClientRef.current.activate();
+
+            return () => {
+                v2xClientRef.current?.deactivate();
+            };
+        } else {
+            if (!simulationRef.current) {
+                simulationRef.current = new VehicleSimulation(mapData);
+                for (let i = 0; i < 3; i++) {
+                    setTimeout(() => simulationRef.current?.spawnVehicle(), i * 500);
+                }
+            }
+
+            let spawnInterval = setInterval(() => {
+                if (simulationRef.current && simulationRef.current.vehicles.length < 12) {
+                    simulationRef.current.spawnVehicle();
+                }
+            }, 2500);
+
+            const gameLoop = (timestamp) => {
+                const deltaTime = timestamp - lastTimeRef.current;
+                lastTimeRef.current = timestamp;
+
+                if (simulationRef.current) {
+                    simulationRef.current.update(deltaTime);
+                    setVehicles([...simulationRef.current.getVehicles()]);
+                }
+
+                animationRef.current = requestAnimationFrame(gameLoop);
+            };
+
+            animationRef.current = requestAnimationFrame(gameLoop);
+
+            return () => {
+                clearInterval(spawnInterval);
+                if (animationRef.current) cancelAnimationFrame(animationRef.current);
+            };
+        }
+    }, [mapData, useBackendSimulation]);
+
     useEffect(() => {
         if (rendererRef.current) {
             rendererRef.current.updateData({
@@ -82,22 +132,18 @@ const IntersectionMap = ({ vehicles }) => {
         }
     }, [mapData, boundingBox, vehicles, images]);
 
-    // Funcții pentru butoanele de UI
     const handleZoomIn = () => rendererRef.current?.zoomIn();
     const handleZoomOut = () => rendererRef.current?.zoomOut();
     const handleReset = () => rendererRef.current?.resetView();
 
     return (
         <div className="map-glass-container" style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
-
-            {/* Butoanele de control plutitoare */}
             <div className="map-controls">
                 <button onClick={handleZoomIn} title="Zoom In">+</button>
                 <button onClick={handleReset} title="Reset View">⟲</button>
                 <button onClick={handleZoomOut} title="Zoom Out">−</button>
             </div>
 
-            {/* Map source indicator */}
             <div style={{
                 position: 'absolute',
                 bottom: '10px',

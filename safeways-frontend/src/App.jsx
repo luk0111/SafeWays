@@ -6,11 +6,6 @@ import './App.css';
 
 function App() {
     const [showIntro, setShowIntro] = useState(true);
-    const [vehicles, setVehicles] = useState([
-        { id: 'User', type: 'NORMAL', x: 400, y: 300, speed: 50, intention: 'FATA', isCurrentUser: true },
-        { id: 'Agent-1', type: 'NORMAL', x: 250, y: 150, speed: 45, intention: 'STANGA', isCurrentUser: false },
-        { id: 'Agent-2', type: 'NORMAL', x: 500, y: 400, speed: 60, intention: 'DREAPTA', isCurrentUser: false }
-    ]);
 
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isClosing, setIsClosing] = useState(false);
@@ -119,7 +114,7 @@ function App() {
                         </div>
                     </header>
                     <div className="map-section">
-                        <IntersectionMap vehicles={vehicles} />
+                        <IntersectionMap />
                     </div>
                 </div>
 
