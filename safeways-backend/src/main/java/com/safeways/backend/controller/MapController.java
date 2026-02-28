@@ -17,7 +17,7 @@ public class MapController {
         this.mapService = mapService;
     }
 
-    // React-ul va face fetch la http://localhost:8080/api/map
+    // React-ul va face fetch la http://localhost:6767/api/map
     @GetMapping("/api/map")
     public CityMap getMapData() {
         return mapService.getMap();

@@ -58,8 +58,8 @@ function App() {
                     </div>
 
                     <div className="track-info">
-                        <h2>Midnight City</h2>
-                        <p>M83 - Hurry Up, We're Dreaming</p>
+                        <h2>Starboy</h2>
+                        <p>The Weeknd, Kiss FM</p>
                     </div>
 
                     <div className="progress-container">
