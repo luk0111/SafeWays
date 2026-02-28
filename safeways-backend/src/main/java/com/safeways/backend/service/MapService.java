@@ -21,7 +21,7 @@ public class MapService {
             xmlMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
             // Citim fisierul din folderul resources
-            InputStream inputStream = new ClassPathResource("Harta_Luxemburg.xml").getInputStream();
+            InputStream inputStream = new ClassPathResource("Harta_Mica.xml").getInputStream();
             this.cityMap = xmlMapper.readValue(inputStream, CityMap.class);
 
             System.out.println("✅ Harta a fost parsată cu succes!");

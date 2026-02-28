@@ -62,7 +62,7 @@ const IntersectionMap = ({ vehicles }) => {
                 // Filtrăm doar nodurile care au 3 sau mai multe legături
                 const intersections = [];
                 Object.keys(nodeConnections).forEach(nodeId => {
-                    if (nodeConnections[nodeId] >= 3 && nodesDictionary[nodeId]) {
+                    if (nodeConnections[nodeId] >= 6 && nodesDictionary[nodeId]) {
                         intersections.push(nodesDictionary[nodeId]); // Salvăm obiectul complet al nodului
                     }
                 });

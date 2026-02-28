@@ -144,7 +144,6 @@ body {
   box-shadow: 0 15px 30px rgba(0,0,0,0.15);
   margin-bottom: 24px;
 }
-/* Placeholder în lipsa unei imagini de album */
 .art-placeholder {
   width: 100%;
   height: 100%;
@@ -168,7 +167,6 @@ body {
   font-weight: 500;
 }
 
-/* Bara de progres */
 .progress-container {
   display: flex;
   align-items: center;
@@ -240,13 +238,11 @@ body {
   justify-content: center;
   align-items: center;
   margin-bottom: 10px;
-  /* Aici am adăugat tranziția fină pentru animație */
   transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 .map-controls button:last-child {
   margin-bottom: 0;
 }
-/* Animația efectivă la hover (identică cu Media Player) */
 .map-controls button:hover {
   background: #f3f4f6;
   transform: scale(1.1);
@@ -261,4 +257,216 @@ button {
 }
 button:focus, button:active {
   outline: none !important;
+}
+/* =========================================
+   SETĂRI: ROTIȚA SIMPLĂ ȘI MENIU PLUTITOR
+   (Design complet izolat de restul aplicației)
+   ========================================= */
+
+/* Doar iconița de rotiță, fără fundal */
+.gear-only-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  font-size: 1.8rem;
+  cursor: pointer;
+  z-index: 1000;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+  user-select: none;
+}
+
+.gear-only-btn:hover {
+  transform: rotate(90deg) scale(1.1);
+}
+
+/* Meniul de setări independent */
+.mini-settings-menu {
+  position: absolute;
+  top: 65px;
+  left: 20px;
+  width: 260px;
+  padding: 20px;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: dropDownMenu 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  transform-origin: top left;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #222;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+@keyframes dropDownMenu {
+  0% { opacity: 0; transform: scale(0.9) translateY(-10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Toggle Switches (Butoanele de on/off) */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 34px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+input:checked + .slider {
+  background-color: #333;
+}
+
+input:checked + .slider.ai-slider {
+  background-color: #a855f7;
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+/* =========================================
+   DARK MODE - FUNCȚIONALITATE ȘI CULORI
+   ========================================= */
+
+/* Setăm o tranziție fină globală pentru fundalul paginii */
+body {
+  transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* Fundalul principal se face întunecat */
+body.dark-theme-active {
+  background-color: #0b0f19;
+  color: #e2e8f0;
+}
+
+/* Transformăm panourile de sticlă din alb în negru-fumuriu */
+.infotainment-layout.dark-mode .glass-panel {
+  background: rgba(20, 25, 40, 0.75) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
+  color: #ffffff;
+}
+
+/* Modificăm culorile textelor din widget-uri pentru a fi vizibile */
+.infotainment-layout.dark-mode h1,
+.infotainment-layout.dark-mode h2,
+.infotainment-layout.dark-mode p,
+.infotainment-layout.dark-mode .weather-temp {
+  color: #f8fafc;
+}
+
+.infotainment-layout.dark-mode .sub-text,
+.infotainment-layout.dark-mode .time-text {
+  color: #94a3b8;
+}
+
+/* Meniul plutitor de Setări când Dark Mode este activ */
+.mini-settings-menu.dark-panel {
+  background: rgba(30, 35, 50, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+}
+
+.mini-settings-menu.dark-panel .setting-row {
+  color: #f8fafc; /* Text alb pe meniul negru */
+}
+
+/* Iconița minimalistă SVG */
+.gear-only-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  cursor: pointer;
+  z-index: 1000;
+  color: #333; /* Culoare închisă pe light mode */
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.4s ease;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gear-only-btn:hover {
+  transform: rotate(90deg);
+}
+
+/* Când este activat dark mode, iconița devine albă */
+.gear-only-btn.icon-dark-mode {
+  color: #ffffff;
+}
+
+/* =========================================
+   STILURI NOI: SVG ALB + ANIMAȚIE DE ÎNCHIDERE
+   ========================================= */
+
+/* Stilul SVG-ului: Alb, contur gri deschis și umbră */
+.gear-only-btn svg {
+  fill: #ffffff; /* Corpul rotiței e complet alb */
+  stroke: #cbd5e1; /* Conturul e un gri deschis elegant */
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.2)); /* Umbra pentru a ieși în evidență */
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Pe dark mode putem lăsa o nuanță puțin mai vizibilă de gri pentru contur, dacă dorești */
+body.dark-theme-active .gear-only-btn svg {
+  stroke: #64748b;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.4));
+}
+
+/* Animația de ÎNCHIDERE a meniului (când primește clasa .closing) */
+.mini-settings-menu.closing {
+  animation: pullUpMenu 0.3s cubic-bezier(0.175, 0.885, 0.32, 1) forwards;
+}
+
+/* Keyframes pentru efectul de închidere */
+@keyframes pullUpMenu {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9) translateY(-10px);
+  }
 }

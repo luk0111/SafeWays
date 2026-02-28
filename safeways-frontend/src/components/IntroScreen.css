@@ -1,0 +1,84 @@
+/* Containerul principal - acum cu fundal alb/gri foarte deschis (Light Theme) */
+.intro-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    /* Fundal alb curat cu o trecere extrem de subtilă spre un gri-movuliu deschis */
+    background: linear-gradient(135deg, #ffffff 0%, #f4f2f7 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    transition: opacity 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.intro-overlay.fade-out {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.intro-content {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Numele aplicației cu gradient mov -> alb/mov deschis */
+.intro-title {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 5rem;
+    font-weight: 800;
+    letter-spacing: -2px;
+    margin: 0;
+    /* Gradient care începe dintr-un mov aprins și se duce într-un alb-movuliu (slight mov) */
+    background: linear-gradient(90deg, #8a2be2 0%, #dcb8ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    opacity: 0;
+    transform: translateY(30px);
+    animation: fadeInUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* Motto-ul cu un look clean, vizibil pe fundal luminos */
+.intro-motto {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 1.2rem;
+    font-weight: 400;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    /* Un gri închis cu o ușoară tentă de mov pentru a se potrivi cu tema */
+    color: #6e677c;
+    margin-top: 1rem;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards 0.4s;
+}
+
+/* Linia care se animă, acum cu un mov luminos */
+.loading-line {
+    margin-top: 40px;
+    width: 0px;
+    height: 2px;
+    background: #a855f7;
+    /* Glow mov adaptat pentru fundal alb */
+    box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+    border-radius: 2px;
+    animation: expandLine 1.5s cubic-bezier(0.8, 0, 0.2, 1) forwards 0.8s;
+}
+
+/* Animații Keyframes */
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes expandLine {
+    to {
+        width: 150px;
+    }
+}
