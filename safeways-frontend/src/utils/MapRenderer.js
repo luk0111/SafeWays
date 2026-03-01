@@ -917,8 +917,11 @@ export class MapRenderer {
                     }
                 }
 
-                // Draw spheres first (behind cars)
+                // Draw spheres first (behind cars) - but not for ambulances
                 vehiclePositions.forEach(v => {
+                    // Skip ambulances - they get rectangular zones instead
+                    if (v.isAmbulance) return;
+
                     const vx = v.screenX;
                     const vy = v.screenY;
 
@@ -946,14 +949,63 @@ export class MapRenderer {
                     ctx.lineWidth = 2.5;
                     ctx.stroke();
                 });
+
+                // Draw ambulance rectangular zones
+                vehiclePositions.filter(v => v.isAmbulance).forEach(ambulance => {
+                    const ambX = ambulance.screenX;
+                    const ambY = ambulance.screenY;
+
+                    // Calculate target position on screen
+                    if (typeof ambulance.targetX === 'number' && typeof ambulance.targetY === 'number') {
+                        const targetScreenX = getX(ambulance.targetX);
+                        const targetScreenY = getY(ambulance.targetY);
+
+                        // Calculate direction and distance
+                        const dx = targetScreenX - ambX;
+                        const dy = targetScreenY - ambY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance > 5) {
+                            // Rectangle dimensions
+                            const rectWidth = 70; // Width of the rectangle (side to side)
+                            const rectLength = distance; // Length to target
+
+                            ctx.save();
+                            ctx.translate(ambX, ambY);
+                            ctx.rotate(-ambulance.rotation);
+
+                            // Draw the rectangular zone in front of ambulance
+                            ctx.beginPath();
+                            ctx.rect(0, -rectWidth/2, rectLength, rectWidth);
+                            ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+                            ctx.fill();
+                            ctx.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+                            ctx.lineWidth = 2;
+                            ctx.setLineDash([5, 5]);
+                            ctx.stroke();
+                            ctx.setLineDash([]);
+
+                            ctx.restore();
+                        }
+                    }
+                });
             }
 
             // Draw cars on top
             vehiclePositions.forEach(v => {
                 const vx = v.screenX;
                 const vy = v.screenY;
-                const carImg = v.isCurrentUser ? images.userCar : images.otherCar;
-                const s = 35; // Constant size regardless of zoom
+
+                // Choose appropriate image
+                let carImg;
+                let s = 35; // Constant size regardless of zoom
+
+                if (v.isAmbulance) {
+                    carImg = images.ambulance;
+                    s = 40; // Ambulances are slightly larger
+                } else {
+                    carImg = v.isCurrentUser ? images.userCar : images.otherCar;
+                }
 
                 ctx.save();
                 ctx.translate(vx, vy);
@@ -962,8 +1014,18 @@ export class MapRenderer {
                     ctx.rotate(-v.rotation);
                 }
 
+                // Apply 50% transparency if vehicle is in ambulance zone
+                if (v.inAmbulanceZone && !v.isAmbulance) {
+                    ctx.globalAlpha = 0.5;
+                }
+
                 // Speeding indicator - red glow for vehicles over 50 km/h
-                if (v.speed > 50) {
+                // Ambulances always have emergency glow
+                if (v.isAmbulance) {
+                    ctx.shadowColor = 'rgba(239, 68, 68, 0.9)';
+                    ctx.shadowBlur = 20;
+                    ctx.shadowOffsetY = 0;
+                } else if (v.speed > 50) {
                     ctx.shadowColor = 'rgba(239, 68, 68, 0.8)';
                     ctx.shadowBlur = 15;
                     ctx.shadowOffsetY = 0;
@@ -979,8 +1041,28 @@ export class MapRenderer {
 
                 ctx.restore();
 
-                // Exclamation mark ABOVE speeding cars
-                if (v.speed > 50) {
+                // Ambulance indicator - red cross above ambulances
+                if (v.isAmbulance) {
+                    ctx.save();
+                    // Red circle background with cross
+                    ctx.beginPath();
+                    ctx.arc(vx, vy - s/2 - 15, 12, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(239, 68, 68, 0.95)';
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Cross symbol
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 14px "Inter", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('+', vx, vy - s/2 - 15);
+                    ctx.restore();
+                }
+                // Exclamation mark ABOVE speeding cars (not ambulances)
+                else if (v.speed > 50) {
                     ctx.save();
                     // Red circle background for exclamation
                     ctx.beginPath();
@@ -997,6 +1079,58 @@ export class MapRenderer {
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
                     ctx.fillText('!', vx, vy - s/2 - 15);
+                    ctx.restore();
+                }
+
+                // AI COMMAND indicator - shows when vehicle is being controlled by AI
+                if (v.aiCommand) {
+                    ctx.save();
+                    const cmdX = vx + s/2 + 8;
+                    const cmdY = vy - s/2 - 8;
+                    const cmdSize = 14;
+
+                    // Draw octagon (stop sign shape) for OPRESTE, circle for others
+                    if (v.aiCommand === 'OPRESTE') {
+                        ctx.beginPath();
+                        const sides = 8;
+                        for (let i = 0; i < sides; i++) {
+                            const angle = (i * 2 * Math.PI / sides) - Math.PI / 8;
+                            const px = cmdX + cmdSize * Math.cos(angle);
+                            const py = cmdY + cmdSize * Math.sin(angle);
+                            if (i === 0) ctx.moveTo(px, py);
+                            else ctx.lineTo(px, py);
+                        }
+                        ctx.closePath();
+                        ctx.fillStyle = 'rgba(220, 38, 38, 0.95)';
+                    } else if (v.aiCommand === 'INCETINESTE') {
+                        ctx.beginPath();
+                        ctx.arc(cmdX, cmdY, cmdSize, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(251, 146, 60, 0.95)';
+                    } else if (v.aiCommand === 'ACCELEREAZA') {
+                        ctx.beginPath();
+                        ctx.arc(cmdX, cmdY, cmdSize, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(34, 197, 94, 0.95)';
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(cmdX, cmdY, cmdSize, 0, Math.PI * 2);
+                        ctx.fillStyle = 'rgba(59, 130, 246, 0.95)';
+                    }
+
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+
+                    // Command text
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 7px "Inter", sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const cmdText = v.aiCommand === 'OPRESTE' ? 'STOP' :
+                                   v.aiCommand === 'INCETINESTE' ? 'SLOW' :
+                                   v.aiCommand === 'ACCELEREAZA' ? 'GO' : 'AI';
+                    ctx.fillText(cmdText, cmdX, cmdY);
+
                     ctx.restore();
                 }
 

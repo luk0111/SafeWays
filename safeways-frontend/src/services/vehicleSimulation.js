@@ -12,6 +12,12 @@ export class VehicleSimulation {
         this.speedLimit = 50; // km/h speed limit
         this.nextSpeedingTime = this.getRandomSpeedingInterval();
         this.lastUpdateTime = Date.now();
+
+        // Ambulance settings
+        this.ambulanceSpawnInterval = 15000 + Math.random() * 15000; // 15-30 seconds
+        this.lastAmbulanceSpawnTime = Date.now();
+        this.ambulanceCount = 0;
+
         this.buildGraph();
     }
 
@@ -193,6 +199,105 @@ export class VehicleSimulation {
         return vehicle;
     }
 
+    /**
+     * Spawn an ambulance (emergency vehicle)
+     * Ambulances have a rectangular zone in front of them that stops other cars
+     */
+    spawnAmbulance() {
+        const goingRight = this.spawnDirection % 2 === 0;
+        this.spawnDirection++;
+
+        let startNodeId, path;
+
+        if (goingRight) {
+            startNodeId = this.getNextLeftSpawnPoint();
+            if (!startNodeId) return null;
+            path = this.findPathToRight(startNodeId);
+        } else {
+            startNodeId = this.getNextRightSpawnPoint();
+            if (!startNodeId) return null;
+            path = this.findPathToLeft(startNodeId);
+        }
+
+        if (path.length < 2) return null;
+
+        const startNode = this.mapData.nodesDict[path[0]];
+        const nextNode = this.mapData.nodesDict[path[1]];
+
+        const targetRotation = this.calculateRotation(startNode.longitude, startNode.latitude, nextNode.longitude, nextNode.latitude);
+
+        const offset = this.getLaneOffset(
+            startNode.longitude, startNode.latitude,
+            nextNode.longitude, nextNode.latitude,
+            goingRight
+        );
+
+        const ambulance = {
+            id: `Ambulance-${++this.ambulanceCount}`,
+            x: startNode.longitude + offset.offsetX,
+            y: startNode.latitude + offset.offsetY,
+            targetX: nextNode.longitude + offset.offsetX,
+            targetY: nextNode.latitude + offset.offsetY,
+            path: path,
+            pathIndex: 0,
+            speed: 0.00000020, // Slightly faster base speed
+            speedKmH: 60 + Math.random() * 20, // 60-80 km/h - emergency speed
+            rotation: targetRotation,
+            targetRotation: targetRotation,
+            isCurrentUser: false,
+            isAmbulance: true, // Mark as ambulance
+            active: true,
+            direction: goingRight ? 'right' : 'left'
+        };
+
+        this.vehicles.push(ambulance);
+        console.log(`🚑 Ambulance ${ambulance.id} spawned!`);
+        return ambulance;
+    }
+
+    /**
+     * Check if a vehicle is inside the ambulance's rectangular zone
+     * The rectangle extends from the ambulance to its next target node
+     */
+    isInAmbulanceZone(vehicle, ambulance) {
+        if (!ambulance || !ambulance.isAmbulance || !ambulance.active) return false;
+        if (vehicle === ambulance) return false;
+        if (vehicle.isAmbulance) return false; // Ambulances don't affect each other
+
+        // Get ambulance's direction vector
+        const ambDirX = Math.cos(ambulance.rotation);
+        const ambDirY = Math.sin(ambulance.rotation);
+
+        // Get vector from ambulance to vehicle
+        const toVehicleX = vehicle.x - ambulance.x;
+        const toVehicleY = vehicle.y - ambulance.y;
+
+        // Project vehicle position onto ambulance's direction (forward distance)
+        const forwardDist = ambDirX * toVehicleX + ambDirY * toVehicleY;
+
+        // Calculate the distance to target (next node)
+        const distToTarget = this.getDistance(ambulance.x, ambulance.y, ambulance.targetX, ambulance.targetY);
+
+        // Only check vehicles that are IN FRONT of the ambulance (positive forward distance)
+        // and within the distance to the next node
+        if (forwardDist <= 0 || forwardDist > distToTarget) return false;
+
+        // Calculate lateral distance (perpendicular to direction)
+        const lateralDist = Math.abs(-ambDirY * toVehicleX + ambDirX * toVehicleY);
+
+        // Rectangle width: ~20m on each side (0.00018 in coordinate units)
+        const rectangleHalfWidth = 0.00018;
+
+        return lateralDist <= rectangleHalfWidth;
+    }
+
+    /**
+     * Get all ambulances currently active
+     */
+    getActiveAmbulances() {
+        return this.vehicles.filter(v => v.isAmbulance && v.active);
+    }
+
     calculateRotation(fromX, fromY, toX, toY) {
         return Math.atan2(toY - fromY, toX - fromX);
     }
@@ -220,6 +325,7 @@ export class VehicleSimulation {
         const dy = y2 - y1;
         return Math.sqrt(dx * dx + dy * dy);
     }
+
 
     // Find the closest car in front of the given vehicle (same direction only)
     findCarInFront(vehicle, searchDistance) {
@@ -286,6 +392,20 @@ export class VehicleSimulation {
             this.nextSpeedingTime = this.getRandomSpeedingInterval();
         }
 
+        // Check if it's time to spawn an ambulance
+        if (currentTime - this.lastAmbulanceSpawnTime >= this.ambulanceSpawnInterval) {
+            // Only spawn if there are less than 2 ambulances active
+            const activeAmbulances = this.getActiveAmbulances();
+            if (activeAmbulances.length < 2) {
+                this.spawnAmbulance();
+            }
+            this.lastAmbulanceSpawnTime = currentTime;
+            this.ambulanceSpawnInterval = 15000 + Math.random() * 15000;
+        }
+
+        // Get all active ambulances for zone checking
+        const activeAmbulances = this.getActiveAmbulances();
+
         // Minimum distance between cars (in coordinate units, ~10m)
         const MIN_CAR_DISTANCE = 0.00012;
         // Safe following distance (in coordinate units, ~15m)
@@ -293,6 +413,18 @@ export class VehicleSimulation {
 
         this.vehicles.forEach(vehicle => {
             if (!vehicle.active) return;
+
+            // Check if this vehicle is in any ambulance's zone
+            let inAmbulanceZone = false;
+            for (const ambulance of activeAmbulances) {
+                if (this.isInAmbulanceZone(vehicle, ambulance)) {
+                    inAmbulanceZone = true;
+                    break;
+                }
+            }
+
+            // Update vehicle's ambulance zone state
+            vehicle.inAmbulanceZone = inAmbulanceZone;
 
             vehicle.rotation = this.lerpAngle(vehicle.rotation, vehicle.targetRotation, 0.12);
 
@@ -327,12 +459,29 @@ export class VehicleSimulation {
                     vehicle.targetRotation = this.calculateRotation(currentNode.longitude, currentNode.latitude, nextNode.longitude, nextNode.latitude);
                 }
             } else {
-                // Check for car in front and adjust speed
-                const carInFront = this.findCarInFront(vehicle, SAFE_FOLLOWING_DISTANCE);
+                // Check for car in front and adjust speed (but not for ambulances)
+                const carInFront = vehicle.isAmbulance ? null : this.findCarInFront(vehicle, SAFE_FOLLOWING_DISTANCE);
 
                 let effectiveSpeedKmH = vehicle.speedKmH;
 
-                if (carInFront) {
+                // AMBULANCES: Always keep driving at full speed, ignore all obstacles
+                if (vehicle.isAmbulance) {
+                    effectiveSpeedKmH = vehicle.speedKmH; // Ambulances never slow down
+                }
+                // AMBULANCE ZONE: If vehicle is in ambulance zone, stop completely
+                else if (vehicle.inAmbulanceZone) {
+                    effectiveSpeedKmH = 0;
+                }
+                // Apply AI command if present (from backend collision prediction)
+                else if (vehicle.aiCommand) {
+                    if (vehicle.aiCommand === 'OPRESTE') {
+                        effectiveSpeedKmH = 0;
+                    } else if (vehicle.aiCommand === 'INCETINESTE') {
+                        effectiveSpeedKmH = Math.min(effectiveSpeedKmH, vehicle.aiTargetSpeed || 20);
+                    } else if (vehicle.aiCommand === 'ACCELEREAZA') {
+                        effectiveSpeedKmH = Math.max(effectiveSpeedKmH, vehicle.aiTargetSpeed || 60);
+                    }
+                } else if (carInFront) {
                     const distToCarInFront = this.getDistance(vehicle.x, vehicle.y, carInFront.x, carInFront.y);
 
                     // If too close, stop completely
@@ -364,6 +513,30 @@ export class VehicleSimulation {
         this.vehicles = this.vehicles.filter(v => v.active);
     }
 
+    /**
+     * Apply AI decisions to vehicles (called from IntersectionMap when backend responds)
+     */
+    applyAiDecisions(decisions) {
+        if (!decisions || !Array.isArray(decisions)) return;
+
+        decisions.forEach(decision => {
+            const vehicle = this.vehicles.find(v => v.id === decision.vehicleId);
+            if (vehicle) {
+                vehicle.aiCommand = decision.actiune;
+                vehicle.aiTargetSpeed = decision.vitezaTintaKmH;
+                console.log(`🤖 AI Command for ${vehicle.id}: ${decision.actiune} (target: ${decision.vitezaTintaKmH} km/h) - ${decision.motiv}`);
+
+                // Clear AI command after 3 seconds
+                setTimeout(() => {
+                    if (vehicle.aiCommand === decision.actiune) {
+                        vehicle.aiCommand = null;
+                        vehicle.aiTargetSpeed = null;
+                    }
+                }, 3000);
+            }
+        });
+    }
+
     // Randomly make a vehicle speed over the limit
     generateRandomSpeeder() {
         const activeVehicles = this.vehicles.filter(v => v.active && v.speedKmH <= this.speedLimit);
@@ -385,8 +558,14 @@ export class VehicleSimulation {
             y: v.y,
             rotation: v.rotation,
             isCurrentUser: v.isCurrentUser,
-            speed: v.speedKmH, // Return speedKmH as speed for rendering
-            direction: v.direction
+            speed: v.speedKmH,
+            direction: v.direction,
+            aiCommand: v.aiCommand || null,
+            isAmbulance: v.isAmbulance || false,
+            inAmbulanceZone: v.inAmbulanceZone || false,
+            // Include target position for ambulances to draw the rectangle
+            targetX: v.isAmbulance ? v.targetX : undefined,
+            targetY: v.isAmbulance ? v.targetY : undefined
         }));
     }
 }
