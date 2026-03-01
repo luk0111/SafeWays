@@ -6,7 +6,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
-@RestController
+    @RestController
 @RequestMapping("/api/ai")
 @CrossOrigin(origins = "*")
 public class AiProxyController {

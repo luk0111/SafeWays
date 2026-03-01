@@ -504,6 +504,127 @@ export class VehicleSimulation {
         return ambulance;
     }
 
+    spawnUserCar() {
+        const goingRight = this.spawnDirection % 2 === 0;
+        this.spawnDirection++;
+
+        let startNodeId, path;
+
+        if (goingRight) {
+            startNodeId = this.getNextLeftSpawnPoint();
+            if (!startNodeId) return null;
+            path = this.findPathToRight(startNodeId);
+        } else {
+            startNodeId = this.getNextRightSpawnPoint();
+            if (!startNodeId) return null;
+            path = this.findPathToLeft(startNodeId);
+        }
+
+        if (path.length < 2) return null;
+
+        const startNode = this.mapData.nodesDict[path[0]];
+        const nextNode = this.mapData.nodesDict[path[1]];
+
+        const targetRotation = this.calculateRotation(startNode.longitude, startNode.latitude, nextNode.longitude, nextNode.latitude);
+
+        const offset = this.getLaneOffset(
+            startNode.longitude, startNode.latitude,
+            nextNode.longitude, nextNode.latitude,
+            goingRight
+        );
+
+        const userCar = {
+            id: `User-${this.nextVehicleId++}`,
+            x: startNode.longitude + offset.offsetX,
+            y: startNode.latitude + offset.offsetY,
+            targetX: nextNode.longitude + offset.offsetX,
+            targetY: nextNode.latitude + offset.offsetY,
+            path: path,
+            pathIndex: 0,
+            speed: 0.00000015 + Math.random() * 0.00000005,
+            speedKmH: 35 + Math.random() * 15,
+            rotation: targetRotation,
+            targetRotation: targetRotation,
+            isCurrentUser: true,
+            isAmbulance: false,
+            active: true,
+            direction: goingRight ? 'right' : 'left'
+        };
+
+        this.vehicles.push(userCar);
+        console.log(`🚗 User car ${userCar.id} spawned!`);
+        return userCar;
+    }
+
+    assignNewPathToUserCar(vehicle) {
+        const currentEndNode = vehicle.path[vehicle.path.length - 1];
+        const neighbors = this.adjacencyList[currentEndNode] || [];
+
+        if (neighbors.length === 0) {
+            const goingRight = Math.random() > 0.5;
+            let newPath;
+            if (goingRight) {
+                const startNodeId = this.getNextLeftSpawnPoint();
+                if (startNodeId) {
+                    newPath = this.findPathToRight(startNodeId);
+                }
+            } else {
+                const startNodeId = this.getNextRightSpawnPoint();
+                if (startNodeId) {
+                    newPath = this.findPathToLeft(startNodeId);
+                }
+            }
+
+            if (newPath && newPath.length >= 2) {
+                const startNode = this.mapData.nodesDict[newPath[0]];
+                const nextNode = this.mapData.nodesDict[newPath[1]];
+                const offset = this.getLaneOffset(
+                    startNode.longitude, startNode.latitude,
+                    nextNode.longitude, nextNode.latitude,
+                    goingRight
+                );
+
+                vehicle.path = newPath;
+                vehicle.pathIndex = 0;
+                vehicle.direction = goingRight ? 'right' : 'left';
+                vehicle.x = startNode.longitude + offset.offsetX;
+                vehicle.y = startNode.latitude + offset.offsetY;
+                vehicle.targetX = nextNode.longitude + offset.offsetX;
+                vehicle.targetY = nextNode.latitude + offset.offsetY;
+                vehicle.targetRotation = this.calculateRotation(startNode.longitude, startNode.latitude, nextNode.longitude, nextNode.latitude);
+            }
+            return;
+        }
+
+        const previousNode = vehicle.path.length >= 2 ? vehicle.path[vehicle.path.length - 2] : null;
+        let possibleNextNodes = neighbors.filter(n => n !== previousNode);
+
+        if (possibleNextNodes.length === 0) {
+            possibleNextNodes = neighbors;
+        }
+
+        const nextNodeId = possibleNextNodes[Math.floor(Math.random() * possibleNextNodes.length)];
+        const currentNode = this.mapData.nodesDict[currentEndNode];
+        const nextNode = this.mapData.nodesDict[nextNodeId];
+
+        if (!currentNode || !nextNode) return;
+
+        const goingRight = vehicle.direction === 'right';
+        const offset = this.getLaneOffset(
+            currentNode.longitude, currentNode.latitude,
+            nextNode.longitude, nextNode.latitude,
+            goingRight
+        );
+
+        vehicle.path = [currentEndNode, nextNodeId];
+        vehicle.pathIndex = 0;
+        vehicle.x = currentNode.longitude + offset.offsetX;
+        vehicle.y = currentNode.latitude + offset.offsetY;
+        vehicle.targetX = nextNode.longitude + offset.offsetX;
+        vehicle.targetY = nextNode.latitude + offset.offsetY;
+        vehicle.targetRotation = this.calculateRotation(currentNode.longitude, currentNode.latitude, nextNode.longitude, nextNode.latitude);
+    }
+
     isInAmbulanceZone(vehicle, ambulance) {
         if (!ambulance || !ambulance.isAmbulance || !ambulance.active) return false;
         if (vehicle === ambulance) return false;
@@ -1046,6 +1167,10 @@ export class VehicleSimulation {
                 vehicle.pathIndex++;
 
                 if (vehicle.pathIndex >= vehicle.path.length - 1) {
+                    if (vehicle.isCurrentUser) {
+                        this.assignNewPathToUserCar(vehicle);
+                        return;
+                    }
                     vehicle.active = false;
                     return;
                 }

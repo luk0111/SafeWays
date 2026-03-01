@@ -1265,9 +1265,14 @@ export class MapRenderer {
                     ctx.globalAlpha = 0.5;
                 }
 
-                // Speeding indicator - red glow for vehicles over 50 km/h
+                // User's personal car - neon cyan aura
+                if (v.isCurrentUser) {
+                    ctx.shadowColor = 'rgba(0, 255, 255, 0.9)';
+                    ctx.shadowBlur = 25;
+                    ctx.shadowOffsetY = 0;
+                }
                 // Ambulances always have emergency glow
-                if (v.isAmbulance) {
+                else if (v.isAmbulance) {
                     ctx.shadowColor = 'rgba(239, 68, 68, 0.9)';
                     ctx.shadowBlur = 20;
                     ctx.shadowOffsetY = 0;

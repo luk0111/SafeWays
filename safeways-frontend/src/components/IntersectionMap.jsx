@@ -275,6 +275,11 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
             simulationRef.current.spawnPedestrian();
         }
     };
+    const handleAddUserCar = () => {
+        if (simulationRef.current && !useBackendSimulation) {
+            simulationRef.current.spawnUserCar();
+        }
+    };
 
     return (
         <div className="map-glass-container" style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'center' }}>
@@ -376,6 +381,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            borderBottom: '1px solid #f1f3f4',
                             transition: 'background 0.2s, color 0.2s',
                             padding: '0 12px'
                         }}
@@ -389,6 +395,36 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                         }}
                     >
                         Add Pedestrian
+                    </button>
+                    <button
+                        onClick={handleAddUserCar}
+                        title="Add Your Car"
+                        style={{
+                            minWidth: '90px',
+                            height: '36px',
+                            border: 'none',
+                            background: 'white',
+                            color: '#5f6368',
+                            fontSize: '12px',
+                            fontWeight: '500',
+                            fontFamily: '"Inter", system-ui, sans-serif',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'background 0.2s, color 0.2s',
+                            padding: '0 12px'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.target.style.background = '#ecfeff';
+                            e.target.style.color = '#0891b2';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.target.style.background = 'white';
+                            e.target.style.color = '#5f6368';
+                        }}
+                    >
+                        My Car
                     </button>
                 </div>
             )}
