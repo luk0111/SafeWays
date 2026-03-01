@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createV2xClient } from './services/v2xService';
+import { getWeatherData } from './services/weatherService';
 import IntersectionMap from './components/IntersectionMap';
 import IntroScreen from './components/IntroScreen';
 import './App.css';
@@ -13,11 +14,64 @@ function App() {
     const [aiEnhancing, setAiEnhancing] = useState(true);
     const [showCollisionSpheres, setShowCollisionSpheres] = useState(true);
 
+    // --- 🌤️ WEATHER STATE ---
+    const [weather, setWeather] = useState({
+        temperature: '--',
+        icon: '🌤️',
+        city: 'Brașov',
+        country: 'România',
+        precipitation: '--',
+        isLoading: true
+    });
+
     // --- 🎵 MUSIC PLAYER STATES ---
     const [isPlaying, setIsPlaying] = useState(true);
     const [progress, setProgress] = useState(84); // 1:24
     const [isSkipping, setIsSkipping] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const progressBarRef = useRef(null);
     const songDuration = 243; // 4:03
+
+    // Handle seeking when clicking/dragging on progress bar
+    const handleProgressSeek = useCallback((e) => {
+        if (!progressBarRef.current) return;
+
+        const rect = progressBarRef.current.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const percentage = Math.max(0, Math.min(1, clickX / rect.width));
+        const newProgress = Math.round(percentage * songDuration);
+
+        setIsSkipping(true);
+        setProgress(newProgress);
+        setTimeout(() => setIsSkipping(false), 50);
+    }, [songDuration]);
+
+    const handleMouseDown = (e) => {
+        setIsDragging(true);
+        handleProgressSeek(e);
+    };
+
+    const handleMouseMove = useCallback((e) => {
+        if (isDragging) {
+            handleProgressSeek(e);
+        }
+    }, [isDragging, handleProgressSeek]);
+
+    const handleMouseUp = useCallback(() => {
+        setIsDragging(false);
+    }, []);
+
+    // Add/remove mouse event listeners for dragging
+    useEffect(() => {
+        if (isDragging) {
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+        }
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [isDragging, handleMouseMove, handleMouseUp]);
 
     const handleSkipPrev = () => {
         setIsSkipping(true);
@@ -73,6 +127,37 @@ function App() {
             document.body.classList.remove('dark-theme-active');
         }
     }, [isDarkMode]);
+
+    // Fetch live weather data
+    useEffect(() => {
+        const fetchWeather = async () => {
+            try {
+                const data = await getWeatherData();
+                setWeather({
+                    temperature: data.temperature,
+                    icon: data.icon,
+                    city: data.city,
+                    country: data.country === 'RO' ? 'România' : data.country,
+                    precipitation: data.precipitation,
+                    humidity: data.humidity,
+                    windSpeed: data.windSpeed,
+                    description: data.description,
+                    condition: data.condition,
+                    isLoading: false,
+                    isOffline: data.isOffline || false
+                });
+            } catch (error) {
+                console.error('Weather fetch error:', error);
+                setWeather(prev => ({ ...prev, isLoading: false, isOffline: true }));
+            }
+        };
+
+        fetchWeather();
+
+        // Refresh weather every 10 minutes
+        const interval = setInterval(fetchWeather, 10 * 60 * 1000);
+        return () => clearInterval(interval);
+    }, []);
 
     useEffect(() => {
         const client = createV2xClient((decision) => {
@@ -142,13 +227,32 @@ function App() {
                 <div className="right-panel">
                     <div className="weather-widget glass-panel">
                         <div className="weather-header">
-                            <div className="weather-temp">18°C</div>
-                            <div className="weather-icon">🌤️</div>
+                            <div className="weather-temp">
+                                {weather.isLoading ? '--' : `${weather.temperature}°C`}
+                            </div>
+                            <div className="weather-icon">{weather.icon}</div>
                         </div>
                         <div className="weather-details">
-                            <p>Brașov, România</p>
-                            <p className="sub-text">Precipitații: <strong>10%</strong></p>
+                            <p>{weather.city}, {weather.country}</p>
+                            <p className="sub-text">
+                                Precipitații: <strong>{weather.isLoading ? '--' : `${weather.precipitation}%`}</strong>
+                            </p>
+                            {weather.humidity && !weather.isLoading && (
+                                <p className="sub-text">
+                                    Umiditate: <strong>{weather.humidity}%</strong>
+                                </p>
+                            )}
                         </div>
+                        {weather.isOffline && (
+                            <div className="weather-offline" style={{
+                                fontSize: '0.7rem',
+                                color: '#9ca3af',
+                                marginTop: '8px',
+                                textAlign: 'center'
+                            }}>
+                                ⚠️ Date offline
+                            </div>
+                        )}
                     </div>
 
                     <div className="media-player glass-panel">
@@ -166,12 +270,33 @@ function App() {
 
                         <div className="progress-container">
                             <div className="time-text">{formatTime(progress)}</div>
-                            <div className="progress-bar">
+                            <div
+                                className="progress-bar"
+                                ref={progressBarRef}
+                                onMouseDown={handleMouseDown}
+                                style={{ cursor: 'pointer' }}
+                            >
                                 <div
                                     className="progress-fill"
                                     style={{
                                         width: `${(progress / songDuration) * 100}%`,
-                                        transition: isSkipping ? 'none' : 'width 1s linear'
+                                        transition: isSkipping || isDragging ? 'none' : 'width 1s linear'
+                                    }}
+                                ></div>
+                                <div
+                                    className="progress-thumb"
+                                    style={{
+                                        position: 'absolute',
+                                        left: `${(progress / songDuration) * 100}%`,
+                                        top: '50%',
+                                        transform: 'translate(-50%, -50%)',
+                                        width: '12px',
+                                        height: '12px',
+                                        borderRadius: '50%',
+                                        backgroundColor: '#111827',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                        opacity: isDragging ? 1 : 0,
+                                        transition: 'opacity 0.2s ease'
                                     }}
                                 ></div>
                             </div>

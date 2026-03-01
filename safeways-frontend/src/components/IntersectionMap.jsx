@@ -18,6 +18,8 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
     const [images, setImages] = useState({ loaded: false, userCar: null, otherCar: null });
     const [mapSource, setMapSource] = useState('Loading...');
     const [vehicles, setVehicles] = useState([]);
+    const [pedestrians, setPedestrians] = useState([]);
+    const [zebraCrossings, setZebraCrossings] = useState([]);
 
     useEffect(() => {
         let isMounted = true;
@@ -97,6 +99,8 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
         } else {
             if (!simulationRef.current) {
                 simulationRef.current = new VehicleSimulation(mapData);
+                // Get zebra crossings from simulation (they are generated once in constructor)
+                setZebraCrossings([...simulationRef.current.getZebraCrossings()]);
                 for (let i = 0; i < 3; i++) {
                     setTimeout(() => simulationRef.current?.spawnVehicle(), i * 500);
                 }
@@ -173,6 +177,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                 if (simulationRef.current) {
                     simulationRef.current.update(deltaTime);
                     setVehicles([...simulationRef.current.getVehicles()]);
+                    setPedestrians([...simulationRef.current.getPedestrians()]);
                 }
 
                 animationRef.current = requestAnimationFrame(gameLoop);
@@ -194,11 +199,13 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                 mapData,
                 boundingBox,
                 vehicles,
+                pedestrians,
+                zebraCrossings,
                 images,
                 showCollisionSpheres
             });
         }
-    }, [mapData, boundingBox, vehicles, images, showCollisionSpheres]);
+    }, [mapData, boundingBox, vehicles, pedestrians, zebraCrossings, images, showCollisionSpheres]);
 
     const handleZoomIn = () => rendererRef.current?.zoomIn();
     const handleZoomOut = () => rendererRef.current?.zoomOut();
@@ -211,6 +218,11 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
     const handleAddAmbulance = () => {
         if (simulationRef.current && !useBackendSimulation) {
             simulationRef.current.spawnAmbulance();
+        }
+    };
+    const handleAddPedestrian = () => {
+        if (simulationRef.current && !useBackendSimulation) {
+            simulationRef.current.spawnPedestrian();
         }
     };
 
@@ -283,6 +295,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
+                            borderBottom: '1px solid #f1f3f4',
                             transition: 'background 0.2s, color 0.2s',
                             padding: '0 12px'
                         }}
@@ -296,6 +309,36 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                         }}
                     >
                         Add Ambulance
+                    </button>
+                    <button
+                        onClick={handleAddPedestrian}
+                        title="Add Pedestrian"
+                        style={{
+                            minWidth: '90px',
+                            height: '36px',
+                            border: 'none',
+                            background: 'white',
+                            color: '#5f6368',
+                            fontSize: '12px',
+                            fontWeight: '500',
+                            fontFamily: '"Inter", system-ui, sans-serif',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'background 0.2s, color 0.2s',
+                            padding: '0 12px'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.target.style.background = '#fef2f2';
+                            e.target.style.color = '#dc2626';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.target.style.background = 'white';
+                            e.target.style.color = '#5f6368';
+                        }}
+                    >
+                        Add Pedestrian
                     </button>
                 </div>
             )}

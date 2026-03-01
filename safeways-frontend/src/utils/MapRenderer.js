@@ -30,6 +30,8 @@ export class MapRenderer {
         this.processedArcs = []; // Pre-processed arcs for better rendering
         this.showCollisionSpheres = true;
         this.trafficClouds = []; // Traffic density cloud data with opacity for smooth transitions
+        this.pedestrians = []; // Pedestrian positions
+        this.zebraCrossings = []; // Zebra crossing locations
         this.initListeners();
     }
 
@@ -91,17 +93,20 @@ export class MapRenderer {
         this.isAnimating = false;
     }
 
-    updateData({ mapData, boundingBox, vehicles, images, showCollisionSpheres }) {
+    updateData({ mapData, boundingBox, vehicles, pedestrians, zebraCrossings, images, showCollisionSpheres }) {
         const dataChanged = mapData && mapData !== this.mapData;
         if (mapData) this.mapData = mapData;
         if (boundingBox) this.boundingBox = boundingBox;
         if (vehicles) this.vehicles = vehicles;
+        if (pedestrians) this.pedestrians = pedestrians;
+        if (zebraCrossings) this.zebraCrossings = zebraCrossings; // Use passed zebra crossings from simulation
         if (images) this.images = images;
         if (typeof showCollisionSpheres === 'boolean') this.showCollisionSpheres = showCollisionSpheres;
 
         if (dataChanged) {
             this.generateDecorations();
             this.processArcs();
+            // Don't generate zebra crossings here - they come from the simulation
         }
         this.startAnimation();
     }
@@ -143,6 +148,77 @@ export class MapRenderer {
             order: typeOrder[arc.type] || 2,
             widthFactor: typeWidths[arc.type] || 0.8
         })).sort((a, b) => a.order - b.order);
+    }
+
+    /**
+     * Generate zebra crossings along streets at fixed intervals
+     * Places zebra crossings randomly on road segments, not at intersections
+     */
+    generateZebraCrossings() {
+        if (!this.mapData || !this.mapData.arcs || !this.mapData.nodesDict) {
+            this.zebraCrossings = [];
+            return;
+        }
+
+        this.zebraCrossings = [];
+
+        // Minimum distance between zebra crossings (in coordinate units, ~50m)
+        const minDistanceBetweenCrossings = 0.00045;
+
+        // Track placed crossings to ensure minimum distance
+        const placedCrossings = [];
+
+        // For each road arc, potentially place zebra crossings
+        this.mapData.arcs.forEach(arc => {
+            const fromNode = this.mapData.nodesDict[arc.from];
+            const toNode = this.mapData.nodesDict[arc.to];
+
+            if (!fromNode || !toNode) return;
+
+            // Calculate arc length
+            const dx = toNode.longitude - fromNode.longitude;
+            const dy = toNode.latitude - fromNode.latitude;
+            const arcLength = Math.sqrt(dx * dx + dy * dy);
+
+            // Skip very short arcs
+            if (arcLength < 0.0003) return;
+
+            // Calculate direction
+            const dirX = dx / arcLength;
+            const dirY = dy / arcLength;
+
+            // Rotation for the crossing (perpendicular to road)
+            const rotation = Math.atan2(dy, dx);
+
+            // Place crossing at a random position along the arc (between 30% and 70% of the way)
+            const randomT = 0.3 + Math.random() * 0.4;
+            const crossingX = fromNode.longitude + dx * randomT;
+            const crossingY = fromNode.latitude + dy * randomT;
+
+            // Check minimum distance from other crossings
+            let tooClose = false;
+            for (const existing of placedCrossings) {
+                const distX = crossingX - existing.x;
+                const distY = crossingY - existing.y;
+                const dist = Math.sqrt(distX * distX + distY * distY);
+                if (dist < minDistanceBetweenCrossings) {
+                    tooClose = true;
+                    break;
+                }
+            }
+
+            if (!tooClose) {
+                const crossing = {
+                    x: crossingX,
+                    y: crossingY,
+                    rotation: rotation,
+                    width: 0.00006,
+                    stripes: 6
+                };
+                this.zebraCrossings.push(crossing);
+                placedCrossings.push({ x: crossingX, y: crossingY });
+            }
+        });
     }
 
     /**
@@ -693,6 +769,44 @@ export class MapRenderer {
             ctx.setLineDash([]);
         }
 
+        // d) ZEBRA CROSSINGS - White background with black stripes across the road
+        if (this.zebraCrossings && this.zebraCrossings.length > 0) {
+            ctx.save();
+            this.zebraCrossings.forEach(crossing => {
+                const cx = getX(crossing.x);
+                const cy = getY(crossing.y);
+
+                // Zebra crossing dimensions - spans across the road width
+                const crossingWidth = Math.max(12, baseRoadW * 1.2); // Width across the road
+                const crossingLength = Math.max(6, 10 * zoom); // Length along walking direction
+                const numStripes = 6;
+                const stripeHeight = crossingLength / numStripes;
+
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(-crossing.rotation); // Aligned with road direction
+
+                // Draw white background rectangle
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(-crossingWidth / 2, -crossingLength / 2, crossingWidth, crossingLength);
+
+                // Draw black stripes (alternating)
+                ctx.fillStyle = '#2a2a2a';
+                for (let i = 0; i < numStripes; i += 2) {
+                    const y = -crossingLength / 2 + i * stripeHeight;
+                    ctx.fillRect(-crossingWidth / 2, y, crossingWidth, stripeHeight);
+                }
+
+                // Draw subtle border
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(-crossingWidth / 2, -crossingLength / 2, crossingWidth, crossingLength);
+
+                ctx.restore();
+            });
+            ctx.restore();
+        }
+
         // 4. INTERSECȚII - Clean circular nodes
         const intersections = mapData.intersections || [];
         if (intersections.length > 0) {
@@ -966,8 +1080,8 @@ export class MapRenderer {
                         const distance = Math.sqrt(dx * dx + dy * dy);
 
                         if (distance > 5) {
-                            // Rectangle dimensions
-                            const rectWidth = 70; // Width of the rectangle (side to side)
+                            // Rectangle dimensions - narrower to only cover the road, not sidewalks
+                            const rectWidth = 45; // Width of the rectangle (side to side) - narrower
                             const rectLength = distance; // Length to target
 
                             ctx.save();
@@ -988,6 +1102,35 @@ export class MapRenderer {
                             ctx.restore();
                         }
                     }
+                });
+
+                // Draw pedestrian detection rectangles for regular vehicles
+                vehiclePositions.filter(v => !v.isAmbulance).forEach(vehicle => {
+                    const vx = vehicle.screenX;
+                    const vy = vehicle.screenY;
+
+                    // Detection rectangle dimensions (smaller than ambulance zone)
+                    const rectWidth = 36; // Width of the rectangle (side to side)
+                    const rectLength = 50; // Length ahead (~30m detection range)
+
+                    ctx.save();
+                    ctx.translate(vx, vy);
+                    ctx.rotate(-vehicle.rotation);
+
+                    // Draw the pedestrian detection zone in front of vehicle
+                    // Color changes based on whether pedestrian is detected
+                    const hasDetection = vehicle.pedestrianAhead;
+                    ctx.beginPath();
+                    ctx.rect(0, -rectWidth/2, rectLength, rectWidth);
+                    ctx.fillStyle = hasDetection ? 'rgba(251, 191, 36, 0.2)' : 'rgba(59, 130, 246, 0.08)';
+                    ctx.fill();
+                    ctx.strokeStyle = hasDetection ? 'rgba(251, 191, 36, 0.7)' : 'rgba(59, 130, 246, 0.3)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([3, 3]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    ctx.restore();
                 });
             }
 
@@ -1159,6 +1302,49 @@ export class MapRenderer {
                     ctx.fillStyle = 'rgba(239, 68, 68, 1)';
                     ctx.fillText(`${Math.round(v.speed)} km/h`, vx, vy + s/2 + 22);
                 }
+            });
+        }
+
+        // 5b. PEDESTRIANS - Red opaque circles with white outline
+        if (this.pedestrians && this.pedestrians.length > 0) {
+            const pedestrianRadius = 6; // Size of pedestrian circle
+
+            this.pedestrians.forEach(p => {
+                const px = getX(p.x);
+                const py = getY(p.y);
+
+                // Draw pedestrian as red opaque circle with solid white outline
+                ctx.save();
+
+                // If crossing, add a pulsing glow effect
+                if (p.isCrossing) {
+                    ctx.shadowColor = 'rgba(220, 38, 38, 0.8)';
+                    ctx.shadowBlur = 12;
+                }
+
+                // Apply 50% transparency if pedestrian is in ambulance zone
+                if (p.inAmbulanceZone) {
+                    ctx.globalAlpha = 0.5;
+                }
+
+                // White outline (drawn first, slightly larger)
+                ctx.beginPath();
+                ctx.arc(px, py, pedestrianRadius + 2, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+
+                // Red opaque fill - brighter when crossing
+                ctx.beginPath();
+                ctx.arc(px, py, pedestrianRadius, 0, Math.PI * 2);
+                ctx.fillStyle = p.isCrossing ? 'rgba(239, 68, 68, 1)' : 'rgba(220, 38, 38, 0.85)';
+                ctx.fill();
+
+                // Solid white stroke outline
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.restore();
             });
         }
 
