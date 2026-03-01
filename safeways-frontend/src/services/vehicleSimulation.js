@@ -4,6 +4,7 @@ export class VehicleSimulation {
         this.vehicles = [];
         this.pedestrians = []; // Add pedestrian array
         this.zebraCrossings = []; // Zebra crossing locations
+        this.trafficLights = []; // Traffic lights at intersections
         this.adjacencyList = {};
         this.nextVehicleId = 1;
         this.nextPedestrianId = 1; // Pedestrian ID counter
@@ -25,8 +26,14 @@ export class VehicleSimulation {
         this.pedestrianSpawnInterval = 8000 + Math.random() * 7000; // 8-15 seconds
         this.lastPedestrianSpawnTime = Date.now();
 
+        // Traffic light timing (in milliseconds)
+        this.trafficLightGreenDuration = 8000;  // 8 seconds green
+        this.trafficLightYellowDuration = 2000; // 2 seconds yellow
+        this.trafficLightRedDuration = 10000;   // 10 seconds red
+
         this.buildGraph();
         this.generateZebraCrossings();
+        this.generateTrafficLights();
     }
 
     // Get random interval between 5-10 seconds (in milliseconds)
@@ -116,6 +123,225 @@ export class VehicleSimulation {
      */
     getZebraCrossings() {
         return this.zebraCrossings;
+    }
+
+    /**
+     * Generate traffic lights at half of the intersections
+     * Creates one traffic light per connected road, with proper phasing
+     * Opposing directions are green together, perpendicular directions are red
+     * Excludes the central antenna intersection
+     */
+    generateTrafficLights() {
+        if (!this.mapData || !this.mapData.intersections) {
+            this.trafficLights = [];
+            return;
+        }
+
+        this.trafficLights = [];
+
+        // Get the central antenna node ID to exclude it from traffic lights
+        const centralNodeId = this.mapData.centralAntenna?.nodeId || null;
+
+        // Filter out the central intersection (where the green sphere/antenna is)
+        const availableIntersections = this.mapData.intersections.filter(
+            intersection => intersection.id !== centralNodeId
+        );
+
+        // Place traffic lights at half of the available intersections
+        const numIntersectionsWithLights = Math.ceil(availableIntersections.length / 2);
+
+        // Shuffle and pick random intersections
+        const shuffled = [...availableIntersections].sort(() => Math.random() - 0.5);
+        const selectedIntersections = shuffled.slice(0, numIntersectionsWithLights);
+
+        selectedIntersections.forEach((intersection, intersectionIndex) => {
+            // Find connected arcs to this intersection
+            const connectedArcs = this.mapData.arcs.filter(arc =>
+                arc.from === intersection.id || arc.to === intersection.id
+            );
+
+            if (connectedArcs.length < 2) return; // Need at least 2 roads for traffic lights
+
+            // Calculate rotation for each connected road
+            const roadDirections = connectedArcs.map((arc, arcIndex) => {
+                const otherNodeId = arc.from === intersection.id ? arc.to : arc.from;
+                const otherNode = this.mapData.nodesDict[otherNodeId];
+                if (!otherNode) return null;
+
+                const dx = otherNode.longitude - intersection.longitude;
+                const dy = otherNode.latitude - intersection.latitude;
+                const rotation = Math.atan2(dy, dx);
+
+                // Normalize rotation to 0-2PI
+                const normalizedRotation = rotation < 0 ? rotation + 2 * Math.PI : rotation;
+
+                return {
+                    arcIndex,
+                    nodeId: otherNodeId,
+                    rotation: rotation,
+                    normalizedRotation: normalizedRotation,
+                    dx, dy
+                };
+            }).filter(Boolean);
+
+            // Sort roads by rotation angle to group opposing directions
+            roadDirections.sort((a, b) => a.normalizedRotation - b.normalizedRotation);
+
+            // Assign phases: roads roughly opposite each other share the same phase
+            // Phase 0 = first half of cycle (GREEN), Phase 1 = second half (GREEN)
+            roadDirections.forEach((road, index) => {
+                // Find if there's an opposing road (roughly 180 degrees apart)
+                let phase = 0;
+
+                if (roadDirections.length >= 3) {
+                    // For 3+ roads: alternate phases based on position
+                    // Every other road gets phase 1
+                    phase = index % 2;
+                } else if (roadDirections.length === 2) {
+                    // For 2 roads: they're opposing, same phase
+                    phase = 0;
+                }
+
+                // Stagger intersection timing so not all intersections change together
+                const intersectionOffset = intersectionIndex * 5000; // 5 second offset
+
+                // Create individual traffic light for this road
+                const trafficLight = {
+                    id: `traffic-light-${intersection.id}-${index}`,
+                    intersectionId: intersection.id,
+                    x: intersection.longitude,
+                    y: intersection.latitude,
+                    // Direction this light controls (incoming traffic from this road)
+                    rotation: road.rotation,
+                    nodeId: road.nodeId,
+                    // Phase determines when this light is green (0 or 1)
+                    phase: phase,
+                    // Current state
+                    state: 'GREEN',
+                    // Timing offset for this intersection
+                    intersectionOffset: intersectionOffset,
+                    // Position offset from intersection center (for rendering)
+                    offsetX: Math.cos(road.rotation + Math.PI) * 0.00004,
+                    offsetY: Math.sin(road.rotation + Math.PI) * 0.00004
+                };
+
+                this.trafficLights.push(trafficLight);
+            });
+        });
+
+        console.log(`🚦 Generated ${this.trafficLights.length} traffic lights at ${selectedIntersections.length} intersections`);
+    }
+
+    /**
+     * Update traffic light states based on timing
+     * Phase 0 lights: GREEN in first half of cycle
+     * Phase 1 lights: GREEN in second half of cycle
+     */
+    updateTrafficLights() {
+        const now = Date.now();
+        // Full cycle = 2 phases, each with green + yellow
+        const phaseDuration = this.trafficLightGreenDuration + this.trafficLightYellowDuration;
+        const fullCycleDuration = phaseDuration * 2;
+
+        this.trafficLights.forEach(light => {
+            const elapsed = (now - light.intersectionOffset) % fullCycleDuration;
+
+            // Determine which phase is currently active
+            const currentPhaseIndex = Math.floor(elapsed / phaseDuration);
+            const timeInPhase = elapsed % phaseDuration;
+
+            // Check if this light's phase is active
+            const isMyPhaseActive = (light.phase === currentPhaseIndex);
+
+            if (isMyPhaseActive) {
+                // This light's phase is active
+                if (timeInPhase < this.trafficLightGreenDuration) {
+                    light.state = 'GREEN';
+                } else {
+                    light.state = 'YELLOW';
+                }
+            } else {
+                // Other phase is active, this light is red
+                light.state = 'RED';
+            }
+        });
+    }
+
+    /**
+     * Get all traffic lights with current state
+     */
+    getTrafficLights() {
+        return this.trafficLights.map(light => ({
+            id: light.id,
+            intersectionId: light.intersectionId,
+            x: light.x + (light.offsetX || 0),
+            y: light.y + (light.offsetY || 0),
+            state: light.state,
+            rotation: light.rotation,
+            phase: light.phase
+        }));
+    }
+
+    /**
+     * Check if a vehicle should stop for a traffic light
+     * Returns the traffic light if vehicle should stop, null otherwise
+     * Only responds to traffic lights that control the direction the vehicle is coming from
+     */
+    getTrafficLightAhead(vehicle) {
+        if (vehicle.isAmbulance) return null; // Ambulances ignore traffic lights
+
+        const dirX = Math.cos(vehicle.rotation);
+        const dirY = Math.sin(vehicle.rotation);
+
+        // Detection distance for traffic lights (~25m)
+        const detectionDistance = 0.00025;
+        // Stop distance (~10m)
+        const stopDistance = 0.00009;
+
+        let closestLight = null;
+        let closestDist = Infinity;
+
+        for (const light of this.trafficLights) {
+            // Use the intersection center position for detection
+            const toLightX = light.x - vehicle.x;
+            const toLightY = light.y - vehicle.y;
+
+            // Project onto vehicle direction
+            const forwardDist = dirX * toLightX + dirY * toLightY;
+
+            // Only check lights ahead
+            if (forwardDist <= 0 || forwardDist > detectionDistance) continue;
+
+            // Check lateral distance (is it on our path?)
+            const lateralDist = Math.abs(-dirY * toLightX + dirX * toLightY);
+            if (lateralDist > 0.00015) continue; // Not on our path
+
+            // Check if this traffic light controls the direction we're coming from
+            // The light's rotation points towards the road it controls
+            // Vehicle coming from that road would have opposite rotation (roughly)
+            const rotationDiff = Math.abs(this.normalizeAngle(vehicle.rotation - light.rotation));
+
+            // Vehicle should be coming from the direction this light controls
+            // (within ~60 degrees of opposite direction)
+            const isCorrectDirection = rotationDiff > Math.PI * 0.6 && rotationDiff < Math.PI * 1.4;
+
+            if (!isCorrectDirection) continue;
+
+            if (forwardDist < closestDist) {
+                closestDist = forwardDist;
+                closestLight = light;
+            }
+        }
+
+        if (closestLight) {
+            return {
+                light: closestLight,
+                distance: closestDist,
+                shouldStop: closestLight.state === 'RED' ||
+                           (closestLight.state === 'YELLOW' && closestDist > stopDistance)
+            };
+        }
+        return null;
     }
 
     getLeftmostNodes() {
@@ -847,6 +1073,9 @@ export class VehicleSimulation {
         // Update pedestrians
         this.updatePedestrians(dt);
 
+        // Update traffic lights
+        this.updateTrafficLights();
+
         // Get all active ambulances for zone checking
         const activeAmbulances = this.getActiveAmbulances();
 
@@ -861,6 +1090,8 @@ export class VehicleSimulation {
         const ZEBRA_SLOW_DISTANCE = 0.00025;
         // Distance to stop at zebra crossing
         const ZEBRA_STOP_DISTANCE = 0.00012;
+        // Distance to stop at traffic light
+        const TRAFFIC_LIGHT_STOP_DISTANCE = 0.00010;
 
         this.vehicles.forEach(vehicle => {
             if (!vehicle.active) return;
@@ -873,6 +1104,10 @@ export class VehicleSimulation {
                     break;
                 }
             }
+
+            // Check for traffic light ahead
+            const trafficLightResult = this.getTrafficLightAhead(vehicle);
+            vehicle.trafficLightAhead = trafficLightResult;
 
             // Check if approaching a zebra crossing with pedestrian
             let zebraCrossingAhead = null;
@@ -998,6 +1233,22 @@ export class VehicleSimulation {
                         }
                     }
                 }
+                // TRAFFIC LIGHT: Stop at red, caution at yellow, go at green
+                else if (trafficLightResult && trafficLightResult.shouldStop) {
+                    const distToLight = trafficLightResult.distance;
+                    if (distToLight <= TRAFFIC_LIGHT_STOP_DISTANCE) {
+                        // Stop at the traffic light
+                        effectiveSpeedKmH = 0;
+                    } else {
+                        // Gradually slow down as approaching red/yellow light
+                        const slowdownFactor = (distToLight - TRAFFIC_LIGHT_STOP_DISTANCE) / (0.00022 - TRAFFIC_LIGHT_STOP_DISTANCE);
+                        effectiveSpeedKmH = vehicle.speedKmH * Math.min(1, slowdownFactor * 0.5);
+                        effectiveSpeedKmH = Math.max(5, effectiveSpeedKmH);
+                        if (distToLight < TRAFFIC_LIGHT_STOP_DISTANCE * 1.2) {
+                            effectiveSpeedKmH = 0; // Stop when very close
+                        }
+                    }
+                }
                 // Apply AI command if present (from backend collision prediction)
                 else if (vehicle.aiCommand) {
                     if (vehicle.aiCommand === 'OPRESTE') {
@@ -1091,6 +1342,7 @@ export class VehicleSimulation {
             inAmbulanceZone: v.inAmbulanceZone || false,
             stoppingForZebra: v.stoppingForZebra || false,
             pedestrianAhead: v.pedestrianAhead || false,
+            stoppingForTrafficLight: v.trafficLightAhead?.shouldStop || false,
             // Include target position for all vehicles to draw detection rectangle
             targetX: v.targetX,
             targetY: v.targetY

@@ -32,6 +32,7 @@ export class MapRenderer {
         this.trafficClouds = []; // Traffic density cloud data with opacity for smooth transitions
         this.pedestrians = []; // Pedestrian positions
         this.zebraCrossings = []; // Zebra crossing locations
+        this.trafficLights = []; // Traffic light data
         this.initListeners();
     }
 
@@ -93,13 +94,14 @@ export class MapRenderer {
         this.isAnimating = false;
     }
 
-    updateData({ mapData, boundingBox, vehicles, pedestrians, zebraCrossings, images, showCollisionSpheres }) {
+    updateData({ mapData, boundingBox, vehicles, pedestrians, zebraCrossings, trafficLights, images, showCollisionSpheres }) {
         const dataChanged = mapData && mapData !== this.mapData;
         if (mapData) this.mapData = mapData;
         if (boundingBox) this.boundingBox = boundingBox;
         if (vehicles) this.vehicles = vehicles;
         if (pedestrians) this.pedestrians = pedestrians;
         if (zebraCrossings) this.zebraCrossings = zebraCrossings; // Use passed zebra crossings from simulation
+        if (trafficLights) this.trafficLights = trafficLights; // Traffic lights from simulation
         if (images) this.images = images;
         if (typeof showCollisionSpheres === 'boolean') this.showCollisionSpheres = showCollisionSpheres;
 
@@ -831,6 +833,91 @@ export class MapRenderer {
                     ctx.fill();
                     ctx.stroke();
                 }
+            });
+        }
+
+        // 4.2 TRAFFIC LIGHTS - Draw at selected intersections
+        if (this.trafficLights && this.trafficLights.length > 0) {
+            this.trafficLights.forEach(light => {
+                // Position is already offset from intersection center
+                const lx = getX(light.x);
+                const ly = getY(light.y);
+
+                // Traffic light housing dimensions (smaller for multiple lights)
+                const housingWidth = 10;
+                const housingHeight = 26;
+                const lightRadius = 3;
+
+                // Calculate position offset based on light rotation
+                // Place the light on the side of the road it controls
+                const offsetDistance = 18;
+                const lightRotation = light.rotation || 0;
+
+                // Position perpendicular to the road direction, on the right side
+                const perpAngle = lightRotation + Math.PI / 2;
+                const offsetX = Math.cos(perpAngle) * offsetDistance;
+                const offsetY = -Math.sin(perpAngle) * offsetDistance;
+
+                ctx.save();
+
+                // Translate to light position
+                ctx.translate(lx + offsetX, ly + offsetY);
+
+                // Rotate housing to face the road
+                ctx.rotate(-lightRotation + Math.PI / 2);
+
+                // Draw traffic light housing (dark gray box)
+                ctx.fillStyle = '#2d2d2d';
+                ctx.strokeStyle = '#1a1a1a';
+                ctx.lineWidth = 1;
+
+                // Housing background
+                ctx.beginPath();
+                if (ctx.roundRect) {
+                    ctx.roundRect(-housingWidth/2, -housingHeight/2, housingWidth, housingHeight, 2);
+                } else {
+                    ctx.rect(-housingWidth/2, -housingHeight/2, housingWidth, housingHeight);
+                }
+                ctx.fill();
+                ctx.stroke();
+
+                // Draw the three lights (red, yellow, green from top to bottom)
+                const lightSpacing = 7;
+                const lights = [
+                    { color: '#ff0000', activeColor: '#ff4444', y: -lightSpacing, isRed: true },
+                    { color: '#ffaa00', activeColor: '#ffdd00', y: 0, isYellow: true },
+                    { color: '#00ff00', activeColor: '#44ff44', y: lightSpacing, isGreen: true }
+                ];
+
+                lights.forEach(l => {
+                    const isActive =
+                        (l.isRed && light.state === 'RED') ||
+                        (l.isYellow && light.state === 'YELLOW') ||
+                        (l.isGreen && light.state === 'GREEN');
+
+                    ctx.beginPath();
+                    ctx.arc(0, l.y, lightRadius, 0, Math.PI * 2);
+
+                    if (isActive) {
+                        // Active light - bright with glow
+                        ctx.fillStyle = l.activeColor;
+                        ctx.shadowColor = l.activeColor;
+                        ctx.shadowBlur = 6;
+                    } else {
+                        // Inactive light - dim
+                        ctx.fillStyle = '#333333';
+                        ctx.shadowBlur = 0;
+                    }
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+
+                    // Light border
+                    ctx.strokeStyle = '#1a1a1a';
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                });
+
+                ctx.restore();
             });
         }
 

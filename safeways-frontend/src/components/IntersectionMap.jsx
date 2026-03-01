@@ -20,6 +20,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
     const [vehicles, setVehicles] = useState([]);
     const [pedestrians, setPedestrians] = useState([]);
     const [zebraCrossings, setZebraCrossings] = useState([]);
+    const [trafficLights, setTrafficLights] = useState([]);
 
     useEffect(() => {
         let isMounted = true;
@@ -178,6 +179,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                     simulationRef.current.update(deltaTime);
                     setVehicles([...simulationRef.current.getVehicles()]);
                     setPedestrians([...simulationRef.current.getPedestrians()]);
+                    setTrafficLights([...simulationRef.current.getTrafficLights()]);
                 }
 
                 animationRef.current = requestAnimationFrame(gameLoop);
@@ -201,11 +203,12 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
                 vehicles,
                 pedestrians,
                 zebraCrossings,
+                trafficLights,
                 images,
                 showCollisionSpheres
             });
         }
-    }, [mapData, boundingBox, vehicles, pedestrians, zebraCrossings, images, showCollisionSpheres]);
+    }, [mapData, boundingBox, vehicles, pedestrians, zebraCrossings, trafficLights, images, showCollisionSpheres]);
 
     const handleZoomIn = () => rendererRef.current?.zoomIn();
     const handleZoomOut = () => rendererRef.current?.zoomOut();

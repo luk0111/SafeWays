@@ -52,7 +52,7 @@ const mapToWeatherCondition = (weatherId) => {
     if (weatherId === 800) return 'CLEAR'; // Clear
     if (weatherId > 800) return 'CLEAR'; // Clouds
     return 'CLEAR';
-};
+    };
 
 /**
  * Fetch current weather data
