@@ -1,14 +1,6 @@
-/**
- * Weather Service - Fetches live weather data from OpenWeatherMap API
- * Free tier: 1000 calls/day
- */
-
-// OpenWeatherMap API configuration
-// Using a free API key - for production, use environment variables
-const API_KEY = '4d8fb5b93d4af21d66a2948710284366'; // Free demo key
+const API_KEY = '4d8fb5b93d4af21d66a2948710284366';
 const BASE_URL = 'https://api.openweathermap.org/data/2.5/weather';
 
-// Default location: Brașov, Romania
 const DEFAULT_LOCATION = {
     city: 'Brasov',
     country: 'RO',
@@ -16,49 +8,38 @@ const DEFAULT_LOCATION = {
     lon: 25.5887
 };
 
-/**
- * Weather condition mapping to emoji icons
- */
 const weatherIconMap = {
-    '01d': '☀️',  // clear sky day
-    '01n': '🌙',  // clear sky night
-    '02d': '🌤️',  // few clouds day
-    '02n': '☁️',  // few clouds night
-    '03d': '☁️',  // scattered clouds
+    '01d': '☀️',
+    '01n': '🌙',
+    '02d': '🌤️',
+    '02n': '☁️',
+    '03d': '☁️',
     '03n': '☁️',
-    '04d': '☁️',  // broken clouds
+    '04d': '☁️',
     '04n': '☁️',
-    '09d': '🌧️',  // shower rain
+    '09d': '🌧️',
     '09n': '🌧️',
-    '10d': '🌦️',  // rain day
-    '10n': '🌧️',  // rain night
-    '11d': '⛈️',  // thunderstorm
+    '10d': '🌦️',
+    '10n': '🌧️',
+    '11d': '⛈️',
     '11n': '⛈️',
-    '13d': '🌨️',  // snow
+    '13d': '🌨️',
     '13n': '🌨️',
-    '50d': '🌫️',  // mist
+    '50d': '🌫️',
     '50n': '🌫️'
 };
 
-/**
- * Map OpenWeatherMap condition to our WeatherCondition enum
- */
 const mapToWeatherCondition = (weatherId) => {
-    if (weatherId >= 200 && weatherId < 300) return 'RAIN'; // Thunderstorm
-    if (weatherId >= 300 && weatherId < 400) return 'RAIN'; // Drizzle
-    if (weatherId >= 500 && weatherId < 600) return 'RAIN'; // Rain
-    if (weatherId >= 600 && weatherId < 700) return 'SNOW'; // Snow
-    if (weatherId >= 700 && weatherId < 800) return 'CLEAR'; // Atmosphere (mist, fog)
-    if (weatherId === 800) return 'CLEAR'; // Clear
-    if (weatherId > 800) return 'CLEAR'; // Clouds
+    if (weatherId >= 200 && weatherId < 300) return 'RAIN';
+    if (weatherId >= 300 && weatherId < 400) return 'RAIN';
+    if (weatherId >= 500 && weatherId < 600) return 'RAIN';
+    if (weatherId >= 600 && weatherId < 700) return 'SNOW';
+    if (weatherId >= 700 && weatherId < 800) return 'CLEAR';
+    if (weatherId === 800) return 'CLEAR';
+    if (weatherId > 800) return 'CLEAR';
     return 'CLEAR';
-    };
+};
 
-/**
- * Fetch current weather data
- * @param {Object} options - Optional location override
- * @returns {Promise<Object>} Weather data object
- */
 export const fetchWeatherData = async (options = {}) => {
     const { lat, lon, city, country } = { ...DEFAULT_LOCATION, ...options };
 
@@ -78,7 +59,6 @@ export const fetchWeatherData = async (options = {}) => {
 
         const data = await response.json();
 
-        // Transform API response to our format
         const weatherData = {
             temperature: Math.round(data.main.temp),
             feelsLike: Math.round(data.main.feels_like),
@@ -87,9 +67,9 @@ export const fetchWeatherData = async (options = {}) => {
             icon: weatherIconMap[data.weather[0].icon] || '🌤️',
             iconCode: data.weather[0].icon,
             condition: mapToWeatherCondition(data.weather[0].id),
-            windSpeed: Math.round(data.wind.speed * 3.6), // Convert m/s to km/h
-            precipitation: data.rain ? Math.round((data.rain['1h'] || 0) * 10) : 0, // mm to percentage estimate
-            cloudiness: data.clouds.all, // Cloud coverage percentage
+            windSpeed: Math.round(data.wind.speed * 3.6),
+            precipitation: data.rain ? Math.round((data.rain['1h'] || 0) * 10) : 0,
+            cloudiness: data.clouds.all,
             city: data.name,
             country: data.sys.country,
             sunrise: new Date(data.sys.sunrise * 1000),
@@ -97,7 +77,6 @@ export const fetchWeatherData = async (options = {}) => {
             timestamp: new Date()
         };
 
-        // Estimate precipitation probability based on clouds and humidity
         if (weatherData.precipitation === 0) {
             if (weatherData.cloudiness > 80 && weatherData.humidity > 70) {
                 weatherData.precipitation = Math.min(60, Math.round(weatherData.humidity * 0.7));
@@ -111,7 +90,6 @@ export const fetchWeatherData = async (options = {}) => {
         return weatherData;
     } catch (error) {
         console.error('Failed to fetch weather data:', error);
-        // Return fallback data
         return {
             temperature: 18,
             feelsLike: 17,
@@ -131,31 +109,23 @@ export const fetchWeatherData = async (options = {}) => {
     }
 };
 
-/**
- * Get weather data with caching (cache for 10 minutes)
- */
 let cachedWeather = null;
 let cacheTimestamp = null;
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const CACHE_DURATION = 10 * 60 * 1000;
 
 export const getWeatherData = async (options = {}) => {
     const now = Date.now();
 
-    // Return cached data if still valid
     if (cachedWeather && cacheTimestamp && (now - cacheTimestamp) < CACHE_DURATION) {
         return cachedWeather;
     }
 
-    // Fetch fresh data
     cachedWeather = await fetchWeatherData(options);
     cacheTimestamp = now;
 
     return cachedWeather;
 };
 
-/**
- * Clear weather cache (useful for forcing refresh)
- */
 export const clearWeatherCache = () => {
     cachedWeather = null;
     cacheTimestamp = null;
@@ -166,4 +136,3 @@ export default {
     getWeatherData,
     clearWeatherCache
 };
-

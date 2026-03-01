@@ -2,41 +2,38 @@ export class VehicleSimulation {
     constructor(mapData) {
         this.mapData = mapData;
         this.vehicles = [];
-        this.pedestrians = []; // Add pedestrian array
-        this.zebraCrossings = []; // Zebra crossing locations
-        this.trafficLights = []; // Traffic lights at intersections
+        this.pedestrians = [];
+        this.zebraCrossings = [];
+        this.trafficLights = [];
         this.adjacencyList = {};
         this.nextVehicleId = 1;
-        this.nextPedestrianId = 1; // Pedestrian ID counter
+        this.nextPedestrianId = 1;
         this.leftSpawnPoints = [];
         this.rightSpawnPoints = [];
         this.lastLeftSpawnIndex = 0;
         this.lastRightSpawnIndex = 0;
         this.spawnDirection = 0;
-        this.speedLimit = 50; // km/h speed limit
+        this.speedLimit = 50;
         this.nextSpeedingTime = this.getRandomSpeedingInterval();
         this.lastUpdateTime = Date.now();
 
-        // Ambulance settings
-        this.ambulanceSpawnInterval = 15000 + Math.random() * 15000; // 15-30 seconds
+        this.ambulanceSpawnInterval = 15000 + Math.random() * 15000;
         this.lastAmbulanceSpawnTime = Date.now();
         this.ambulanceCount = 0;
 
-        // Pedestrian settings
-        this.pedestrianSpawnInterval = 8000 + Math.random() * 7000; // 8-15 seconds
+        this.pedestrianSpawnInterval = 8000 + Math.random() * 7000;
         this.lastPedestrianSpawnTime = Date.now();
 
-        // Traffic light timing (in milliseconds)
-        this.trafficLightGreenDuration = 8000;  // 8 seconds green
-        this.trafficLightYellowDuration = 2000; // 2 seconds yellow
-        this.trafficLightRedDuration = 10000;   // 10 seconds red
+        this.trafficLightGreenDuration = 8000;
+        this.trafficLightYellowDuration = 2000;
+        this.trafficLightRedDuration = 10000;
+        this.phaseOverrides = {};
 
         this.buildGraph();
         this.generateZebraCrossings();
         this.generateTrafficLights();
     }
 
-    // Get random interval between 5-10 seconds (in milliseconds)
     getRandomSpeedingInterval() {
         return 5000 + Math.random() * 5000;
     }
@@ -61,9 +58,6 @@ export class VehicleSimulation {
         this.rightSpawnPoints = this.getRightmostNodes();
     }
 
-    /**
-     * Generate zebra crossings along streets at fixed intervals
-     */
     generateZebraCrossings() {
         if (!this.mapData || !this.mapData.arcs || !this.mapData.nodesDict) {
             this.zebraCrossings = [];
@@ -71,7 +65,7 @@ export class VehicleSimulation {
         }
 
         this.zebraCrossings = [];
-        const minDistanceBetweenCrossings = 0.00045; // ~50m
+        const minDistanceBetweenCrossings = 0.00045;
         const placedCrossings = [];
 
         this.mapData.arcs.forEach((arc, index) => {
@@ -110,27 +104,18 @@ export class VehicleSimulation {
                     rotation: rotation,
                     arcFrom: arc.from,
                     arcTo: arc.to,
-                    pedestrianCrossing: null, // ID of pedestrian currently crossing
-                    width: 0.00012 // Width of zebra crossing zone
+                    pedestrianCrossing: null,
+                    width: 0.00012
                 });
                 placedCrossings.push({ x: crossingX, y: crossingY });
             }
         });
     }
 
-    /**
-     * Get all zebra crossings
-     */
     getZebraCrossings() {
         return this.zebraCrossings;
     }
 
-    /**
-     * Generate traffic lights at half of the intersections
-     * Creates one traffic light per connected road, with proper phasing
-     * Opposing directions are green together, perpendicular directions are red
-     * Excludes the central antenna intersection
-     */
     generateTrafficLights() {
         if (!this.mapData || !this.mapData.intersections) {
             this.trafficLights = [];
@@ -139,30 +124,24 @@ export class VehicleSimulation {
 
         this.trafficLights = [];
 
-        // Get the central antenna node ID to exclude it from traffic lights
         const centralNodeId = this.mapData.centralAntenna?.nodeId || null;
 
-        // Filter out the central intersection (where the green sphere/antenna is)
         const availableIntersections = this.mapData.intersections.filter(
             intersection => intersection.id !== centralNodeId
         );
 
-        // Place traffic lights at half of the available intersections
         const numIntersectionsWithLights = Math.ceil(availableIntersections.length / 2);
 
-        // Shuffle and pick random intersections
         const shuffled = [...availableIntersections].sort(() => Math.random() - 0.5);
         const selectedIntersections = shuffled.slice(0, numIntersectionsWithLights);
 
         selectedIntersections.forEach((intersection, intersectionIndex) => {
-            // Find connected arcs to this intersection
             const connectedArcs = this.mapData.arcs.filter(arc =>
                 arc.from === intersection.id || arc.to === intersection.id
             );
 
-            if (connectedArcs.length < 2) return; // Need at least 2 roads for traffic lights
+            if (connectedArcs.length < 2) return;
 
-            // Calculate rotation for each connected road
             const roadDirections = connectedArcs.map((arc, arcIndex) => {
                 const otherNodeId = arc.from === intersection.id ? arc.to : arc.from;
                 const otherNode = this.mapData.nodesDict[otherNodeId];
@@ -172,7 +151,6 @@ export class VehicleSimulation {
                 const dy = otherNode.latitude - intersection.latitude;
                 const rotation = Math.atan2(dy, dx);
 
-                // Normalize rotation to 0-2PI
                 const normalizedRotation = rotation < 0 ? rotation + 2 * Math.PI : rotation;
 
                 return {
@@ -184,43 +162,29 @@ export class VehicleSimulation {
                 };
             }).filter(Boolean);
 
-            // Sort roads by rotation angle to group opposing directions
             roadDirections.sort((a, b) => a.normalizedRotation - b.normalizedRotation);
 
-            // Assign phases: roads roughly opposite each other share the same phase
-            // Phase 0 = first half of cycle (GREEN), Phase 1 = second half (GREEN)
             roadDirections.forEach((road, index) => {
-                // Find if there's an opposing road (roughly 180 degrees apart)
                 let phase = 0;
 
                 if (roadDirections.length >= 3) {
-                    // For 3+ roads: alternate phases based on position
-                    // Every other road gets phase 1
                     phase = index % 2;
                 } else if (roadDirections.length === 2) {
-                    // For 2 roads: they're opposing, same phase
                     phase = 0;
                 }
 
-                // Stagger intersection timing so not all intersections change together
-                const intersectionOffset = intersectionIndex * 5000; // 5 second offset
+                const intersectionOffset = intersectionIndex * 5000;
 
-                // Create individual traffic light for this road
                 const trafficLight = {
                     id: `traffic-light-${intersection.id}-${index}`,
                     intersectionId: intersection.id,
                     x: intersection.longitude,
                     y: intersection.latitude,
-                    // Direction this light controls (incoming traffic from this road)
                     rotation: road.rotation,
                     nodeId: road.nodeId,
-                    // Phase determines when this light is green (0 or 1)
                     phase: phase,
-                    // Current state
                     state: 'GREEN',
-                    // Timing offset for this intersection
                     intersectionOffset: intersectionOffset,
-                    // Position offset from intersection center (for rendering)
                     offsetX: Math.cos(road.rotation + Math.PI) * 0.00004,
                     offsetY: Math.sin(road.rotation + Math.PI) * 0.00004
                 };
@@ -232,44 +196,50 @@ export class VehicleSimulation {
         console.log(`🚦 Generated ${this.trafficLights.length} traffic lights at ${selectedIntersections.length} intersections`);
     }
 
-    /**
-     * Update traffic light states based on timing
-     * Phase 0 lights: GREEN in first half of cycle
-     * Phase 1 lights: GREEN in second half of cycle
-     */
+    setPhaseOverrides(overrides) {
+        this.phaseOverrides = overrides || {};
+    }
+
+    getPhaseOverrides() {
+        return this.phaseOverrides || {};
+    }
+
     updateTrafficLights() {
         const now = Date.now();
-        // Full cycle = 2 phases, each with green + yellow
         const phaseDuration = this.trafficLightGreenDuration + this.trafficLightYellowDuration;
         const fullCycleDuration = phaseDuration * 2;
 
         this.trafficLights.forEach(light => {
-            const elapsed = (now - light.intersectionOffset) % fullCycleDuration;
+            const override = this.phaseOverrides?.[light.intersectionId];
+            const hasActiveOverride = override && override.until > now;
 
-            // Determine which phase is currently active
-            const currentPhaseIndex = Math.floor(elapsed / phaseDuration);
-            const timeInPhase = elapsed % phaseDuration;
+            let isMyPhaseActive;
+            let timeInPhase;
 
-            // Check if this light's phase is active
-            const isMyPhaseActive = (light.phase === currentPhaseIndex);
+            if (hasActiveOverride) {
+                isMyPhaseActive = (light.phase === override.priorityPhase);
+                timeInPhase = 0;
+            } else {
+                const elapsed = (now - light.intersectionOffset) % fullCycleDuration;
+                const currentPhaseIndex = Math.floor(elapsed / phaseDuration);
+                timeInPhase = elapsed % phaseDuration;
+                isMyPhaseActive = (light.phase === currentPhaseIndex);
+            }
 
             if (isMyPhaseActive) {
-                // This light's phase is active
-                if (timeInPhase < this.trafficLightGreenDuration) {
+                if (timeInPhase < this.trafficLightGreenDuration || hasActiveOverride) {
                     light.state = 'GREEN';
                 } else {
                     light.state = 'YELLOW';
                 }
             } else {
-                // Other phase is active, this light is red
                 light.state = 'RED';
             }
+
+            light.aiControlled = hasActiveOverride;
         });
     }
 
-    /**
-     * Get all traffic lights with current state
-     */
     getTrafficLights() {
         return this.trafficLights.map(light => ({
             id: light.id,
@@ -278,51 +248,36 @@ export class VehicleSimulation {
             y: light.y + (light.offsetY || 0),
             state: light.state,
             rotation: light.rotation,
-            phase: light.phase
+            phase: light.phase,
+            aiControlled: light.aiControlled || false
         }));
     }
 
-    /**
-     * Check if a vehicle should stop for a traffic light
-     * Returns the traffic light if vehicle should stop, null otherwise
-     * Only responds to traffic lights that control the direction the vehicle is coming from
-     */
     getTrafficLightAhead(vehicle) {
-        if (vehicle.isAmbulance) return null; // Ambulances ignore traffic lights
+        if (vehicle.isAmbulance) return null;
 
         const dirX = Math.cos(vehicle.rotation);
         const dirY = Math.sin(vehicle.rotation);
 
-        // Detection distance for traffic lights (~25m)
         const detectionDistance = 0.00025;
-        // Stop distance (~10m)
         const stopDistance = 0.00009;
 
         let closestLight = null;
         let closestDist = Infinity;
 
         for (const light of this.trafficLights) {
-            // Use the intersection center position for detection
             const toLightX = light.x - vehicle.x;
             const toLightY = light.y - vehicle.y;
 
-            // Project onto vehicle direction
             const forwardDist = dirX * toLightX + dirY * toLightY;
 
-            // Only check lights ahead
             if (forwardDist <= 0 || forwardDist > detectionDistance) continue;
 
-            // Check lateral distance (is it on our path?)
             const lateralDist = Math.abs(-dirY * toLightX + dirX * toLightY);
-            if (lateralDist > 0.00015) continue; // Not on our path
+            if (lateralDist > 0.00015) continue;
 
-            // Check if this traffic light controls the direction we're coming from
-            // The light's rotation points towards the road it controls
-            // Vehicle coming from that road would have opposite rotation (roughly)
             const rotationDiff = Math.abs(this.normalizeAngle(vehicle.rotation - light.rotation));
 
-            // Vehicle should be coming from the direction this light controls
-            // (within ~60 degrees of opposite direction)
             const isCorrectDirection = rotationDiff > Math.PI * 0.6 && rotationDiff < Math.PI * 1.4;
 
             if (!isCorrectDirection) continue;
@@ -485,7 +440,7 @@ export class VehicleSimulation {
             path: path,
             pathIndex: 0,
             speed: 0.00000015 + Math.random() * 0.00000008,
-            speedKmH: 30 + Math.random() * 20, // Normal speed: 30-50 km/h
+            speedKmH: 30 + Math.random() * 20,
             rotation: targetRotation,
             targetRotation: targetRotation,
             isCurrentUser: false,
@@ -497,10 +452,6 @@ export class VehicleSimulation {
         return vehicle;
     }
 
-    /**
-     * Spawn an ambulance (emergency vehicle)
-     * Ambulances have a rectangular zone in front of them that stops other cars
-     */
     spawnAmbulance() {
         const goingRight = this.spawnDirection % 2 === 0;
         this.spawnDirection++;
@@ -538,12 +489,12 @@ export class VehicleSimulation {
             targetY: nextNode.latitude + offset.offsetY,
             path: path,
             pathIndex: 0,
-            speed: 0.00000020, // Slightly faster base speed
-            speedKmH: 60 + Math.random() * 20, // 60-80 km/h - emergency speed
+            speed: 0.00000020,
+            speedKmH: 60 + Math.random() * 20,
             rotation: targetRotation,
             targetRotation: targetRotation,
             isCurrentUser: false,
-            isAmbulance: true, // Mark as ambulance
+            isAmbulance: true,
             active: true,
             direction: goingRight ? 'right' : 'left'
         };
@@ -553,115 +504,77 @@ export class VehicleSimulation {
         return ambulance;
     }
 
-    /**
-     * Check if a vehicle is inside the ambulance's rectangular zone
-     * The rectangle extends from the ambulance to its next target node
-     */
     isInAmbulanceZone(vehicle, ambulance) {
         if (!ambulance || !ambulance.isAmbulance || !ambulance.active) return false;
         if (vehicle === ambulance) return false;
-        if (vehicle.isAmbulance) return false; // Ambulances don't affect each other
+        if (vehicle.isAmbulance) return false;
 
-        // Get ambulance's direction vector
         const ambDirX = Math.cos(ambulance.rotation);
         const ambDirY = Math.sin(ambulance.rotation);
 
-        // Get vector from ambulance to vehicle
         const toVehicleX = vehicle.x - ambulance.x;
         const toVehicleY = vehicle.y - ambulance.y;
 
-        // Project vehicle position onto ambulance's direction (forward distance)
         const forwardDist = ambDirX * toVehicleX + ambDirY * toVehicleY;
 
-        // Calculate the distance to target (next node)
         const distToTarget = this.getDistance(ambulance.x, ambulance.y, ambulance.targetX, ambulance.targetY);
 
-        // Only check vehicles that are IN FRONT of the ambulance (positive forward distance)
-        // and within the distance to the next node
         if (forwardDist <= 0 || forwardDist > distToTarget) return false;
 
-        // Calculate lateral distance (perpendicular to direction)
         const lateralDist = Math.abs(-ambDirY * toVehicleX + ambDirX * toVehicleY);
 
-        // Rectangle width: ~20m on each side (0.00018 in coordinate units)
         const rectangleHalfWidth = 0.00018;
 
         return lateralDist <= rectangleHalfWidth;
     }
 
-    /**
-     * Check if a pedestrian is inside the ambulance's rectangular zone
-     * Only affects pedestrians who are ON the road (crossing), not on sidewalks
-     */
     isPedestrianInAmbulanceZone(pedestrian, ambulance) {
         if (!ambulance || !ambulance.isAmbulance || !ambulance.active) return false;
 
-        // Get ambulance's direction vector
         const ambDirX = Math.cos(ambulance.rotation);
         const ambDirY = Math.sin(ambulance.rotation);
 
-        // Get vector from ambulance to pedestrian
         const toPedX = pedestrian.x - ambulance.x;
         const toPedY = pedestrian.y - ambulance.y;
 
-        // Project pedestrian position onto ambulance's direction (forward distance)
         const forwardDist = ambDirX * toPedX + ambDirY * toPedY;
 
-        // Calculate the distance to target (next node)
         const distToTarget = this.getDistance(ambulance.x, ambulance.y, ambulance.targetX, ambulance.targetY);
 
-        // Only check pedestrians that are IN FRONT of the ambulance
         if (forwardDist <= 0 || forwardDist > distToTarget) return false;
 
-        // Calculate lateral distance (perpendicular to direction)
         const lateralDist = Math.abs(-ambDirY * toPedX + ambDirX * toPedY);
 
-        // Rectangle width: ~5m on each side - narrower than sidewalk offset (0.00007)
-        // This only affects pedestrians ON the road, not on sidewalks
         const rectangleHalfWidth = 0.00005;
 
         return lateralDist <= rectangleHalfWidth;
     }
 
-    /**
-     * Check if a pedestrian is in front of a vehicle (for pedestrian detection)
-     * Returns distance to pedestrian if in front, otherwise null
-     */
     isPedestrianInFrontOfVehicle(vehicle, pedestrian) {
         if (!vehicle || !vehicle.active || vehicle.isAmbulance) return null;
         if (!pedestrian || !pedestrian.active) return null;
 
-        // Get vehicle's direction vector
         const dirX = Math.cos(vehicle.rotation);
         const dirY = Math.sin(vehicle.rotation);
 
-        // Get vector from vehicle to pedestrian
         const toPedX = pedestrian.x - vehicle.x;
         const toPedY = pedestrian.y - vehicle.y;
 
-        // Project pedestrian position onto vehicle's direction (forward distance)
         const forwardDist = dirX * toPedX + dirY * toPedY;
 
-        // Only check pedestrians that are IN FRONT of the vehicle
-        // Detection range: ~30m ahead
         const detectionRange = 0.00027;
         if (forwardDist <= 0 || forwardDist > detectionRange) return null;
 
-        // Calculate lateral distance (perpendicular to direction)
         const lateralDist = Math.abs(-dirY * toPedX + dirX * toPedY);
 
-        // Rectangle width: ~10m on each side (road width)
         const rectangleHalfWidth = 0.00009;
 
         if (lateralDist <= rectangleHalfWidth) {
-            return forwardDist; // Return distance to pedestrian
+            return forwardDist;
         }
         return null;
     }
 
-    /**
-     * Find closest pedestrian in front of vehicle
-     */
     findPedestrianInFront(vehicle) {
         let closestDist = Infinity;
         let closestPed = null;
@@ -677,21 +590,13 @@ export class VehicleSimulation {
         return closestPed ? { pedestrian: closestPed, distance: closestDist } : null;
     }
 
-    /**
-     * Get all ambulances currently active
-     */
     getActiveAmbulances() {
         return this.vehicles.filter(v => v.isAmbulance && v.active);
     }
 
-    /**
-     * Spawn a pedestrian on the sidewalk
-     * Pedestrians walk along the road edges (sidewalks) and randomly cross at zebras
-     */
     spawnPedestrian() {
         if (!this.mapData || !this.mapData.arcs || this.mapData.arcs.length === 0) return null;
 
-        // Pick a random arc (road segment) to walk along
         const randomArcIndex = Math.floor(Math.random() * this.mapData.arcs.length);
         const arc = this.mapData.arcs[randomArcIndex];
 
@@ -700,10 +605,8 @@ export class VehicleSimulation {
 
         if (!fromNode || !toNode) return null;
 
-        // Decide which side of the road (left or right sidewalk)
         const sidewalkSide = Math.random() > 0.5 ? 1 : -1;
 
-        // Calculate perpendicular offset for sidewalk (wider than lane offset)
         const dx = toNode.longitude - fromNode.longitude;
         const dy = toNode.latitude - fromNode.latitude;
         const len = Math.sqrt(dx * dx + dy * dy);
@@ -712,10 +615,8 @@ export class VehicleSimulation {
         const perpX = (dy / len) * sidewalkSide;
         const perpY = (-dx / len) * sidewalkSide;
 
-        // Sidewalk offset (~8m from road center)
         const sidewalkOffset = 0.00007;
 
-        // Start position with sidewalk offset
         const startX = fromNode.longitude + perpX * sidewalkOffset;
         const startY = fromNode.latitude + perpY * sidewalkOffset;
         const endX = toNode.longitude + perpX * sidewalkOffset;
@@ -729,17 +630,16 @@ export class VehicleSimulation {
             targetY: endY,
             startNode: arc.from,
             endNode: arc.to,
-            speed: 0.00000015 + Math.random() * 0.00000008, // Much faster walking speed
+            speed: 0.00000015 + Math.random() * 0.00000008,
             active: true,
             sidewalkSide: sidewalkSide,
-            // Crossing state
             isCrossing: false,
             crossingZebra: null,
             crossingTargetX: null,
             crossingTargetY: null,
             waitingAtZebra: false,
-            crossingCooldown: 0, // Prevent immediate re-crossing
-            inAmbulanceZone: false // Pedestrians also affected by ambulances
+            crossingCooldown: 0,
+            inAmbulanceZone: false
         };
 
         this.pedestrians.push(pedestrian);
@@ -747,11 +647,8 @@ export class VehicleSimulation {
         return pedestrian;
     }
 
-    /**
-     * Find nearby zebra crossing for a pedestrian
-     */
     findNearbyZebra(pedestrian) {
-        const searchRadius = 0.00025; // ~28m - larger search radius to find zebras
+        const searchRadius = 0.00025;
 
         for (const zebra of this.zebraCrossings) {
             const dx = zebra.x - pedestrian.x;
@@ -765,31 +662,20 @@ export class VehicleSimulation {
         return null;
     }
 
-    /**
-     * Check if a pedestrian is currently crossing at a zebra
-     */
     isPedestrianCrossingAtZebra(zebra) {
         return this.pedestrians.some(p => p.isCrossing && p.crossingZebra === zebra.id);
     }
 
-    /**
-     * Get zebra crossings that have pedestrians crossing
-     */
     getActiveZebraCrossings() {
         return this.zebraCrossings.filter(z => this.isPedestrianCrossingAtZebra(z));
     }
 
-    /**
-     * Update pedestrian positions
-     */
     updatePedestrians(dt) {
-        // Get active ambulances for zone checking
         const activeAmbulances = this.getActiveAmbulances();
 
         this.pedestrians.forEach(pedestrian => {
             if (!pedestrian.active) return;
 
-            // Check if pedestrian is in any ambulance's zone
             let inAmbulanceZone = false;
             for (const ambulance of activeAmbulances) {
                 if (this.isPedestrianInAmbulanceZone(pedestrian, ambulance)) {
@@ -799,30 +685,24 @@ export class VehicleSimulation {
             }
             pedestrian.inAmbulanceZone = inAmbulanceZone;
 
-            // If in ambulance zone, stop moving completely
             if (inAmbulanceZone) {
-                return; // Skip movement this frame
+                return;
             }
 
-            // Decrease crossing cooldown
             if (pedestrian.crossingCooldown > 0) {
                 pedestrian.crossingCooldown -= dt;
             }
 
-            // If currently crossing a zebra
             if (pedestrian.isCrossing) {
                 const dx = pedestrian.crossingTargetX - pedestrian.x;
                 const dy = pedestrian.crossingTargetY - pedestrian.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
-                // Check if finished crossing
                 if (dist < 0.00002) {
-                    // Finished crossing - switch sidewalk side
                     pedestrian.isCrossing = false;
-                    pedestrian.sidewalkSide *= -1; // Switch to other side
-                    pedestrian.crossingCooldown = 5000; // 5 second cooldown before crossing again
+                    pedestrian.sidewalkSide *= -1;
+                    pedestrian.crossingCooldown = 5000;
 
-                    // Clear zebra crossing state
                     const zebra = this.zebraCrossings.find(z => z.id === pedestrian.crossingZebra);
                     if (zebra) {
                         zebra.pedestrianCrossing = null;

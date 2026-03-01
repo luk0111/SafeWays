@@ -4,6 +4,7 @@ import { fetchBrasovMapData, calculateBoundingBox } from '../services/osmService
 import { VehicleSimulation } from '../services/vehicleSimulation';
 import { createV2xClient } from '../services/v2xService';
 import { updateVehicles, antennaTick, parseAiDecision, setAntennaPosition, isSimulationPaused } from '../services/antennaService';
+import { runAITrafficControl, makeLocalDecision, analyzeTrafficDensity } from '../services/aiTrafficControlService';
 
 const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = true }) => {
     const canvasRef = useRef(null);
@@ -12,6 +13,8 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
     const lastTimeRef = useRef(0);
     const animationRef = useRef(null);
     const v2xClientRef = useRef(null);
+    const aiControlIntervalRef = useRef(null);
+    const phaseOverridesRef = useRef({});
 
     const [mapData, setMapData] = useState(null);
     const [boundingBox, setBoundingBox] = useState({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
@@ -21,6 +24,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
     const [pedestrians, setPedestrians] = useState([]);
     const [zebraCrossings, setZebraCrossings] = useState([]);
     const [trafficLights, setTrafficLights] = useState([]);
+    const [aiStatus, setAiStatus] = useState({ active: false, lastDecision: null });
 
     useEffect(() => {
         let isMounted = true;
@@ -171,6 +175,48 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
             // Run antenna tick every 200ms (5 times per second)
             let collisionInterval = setInterval(runAntennaTick, 200);
 
+            // AI Traffic Control - runs every 3 seconds
+            let aiControlling = false;
+            const runAITrafficControlLoop = async () => {
+                if (aiControlling || !simulationRef.current) return;
+                aiControlling = true;
+
+                try {
+                    const currentVehicles = simulationRef.current.getVehicles();
+                    const currentLights = simulationRef.current.getTrafficLights();
+
+                    // Try AI control first, fallback to local decision
+                    const result = await runAITrafficControl(
+                        currentVehicles,
+                        currentLights,
+                        mapData,
+                        phaseOverridesRef.current
+                    );
+
+                    if (result.aiDecision) {
+                        // AI made a decision
+                        phaseOverridesRef.current = result.overrides;
+                        simulationRef.current.setPhaseOverrides(result.overrides);
+                        setAiStatus({ active: true, lastDecision: result.aiDecision });
+                    } else if (result.analysis) {
+                        // Fallback to local decision if AI unavailable
+                        const localOverrides = makeLocalDecision(result.analysis, phaseOverridesRef.current);
+                        phaseOverridesRef.current = localOverrides;
+                        simulationRef.current.setPhaseOverrides(localOverrides);
+                        setAiStatus({ active: false, lastDecision: null });
+                    }
+                } catch (error) {
+                    console.error('AI Traffic Control error:', error);
+                    setAiStatus({ active: false, lastDecision: null });
+                } finally {
+                    aiControlling = false;
+                }
+            };
+
+            aiControlIntervalRef.current = setInterval(runAITrafficControlLoop, 3000);
+            // Run once immediately
+            setTimeout(runAITrafficControlLoop, 1000);
+
             const gameLoop = (timestamp) => {
                 const deltaTime = timestamp - lastTimeRef.current;
                 lastTimeRef.current = timestamp;
@@ -190,6 +236,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
             return () => {
                 clearInterval(spawnInterval);
                 clearInterval(collisionInterval);
+                if (aiControlIntervalRef.current) clearInterval(aiControlIntervalRef.current);
                 if (animationRef.current) cancelAnimationFrame(animationRef.current);
             };
         }

@@ -917,6 +917,22 @@ export class MapRenderer {
                     ctx.stroke();
                 });
 
+                // Draw AI control indicator (purple glow around housing)
+                if (light.aiControlled) {
+                    ctx.strokeStyle = '#a855f7';
+                    ctx.lineWidth = 2;
+                    ctx.shadowColor = '#a855f7';
+                    ctx.shadowBlur = 8;
+                    ctx.beginPath();
+                    if (ctx.roundRect) {
+                        ctx.roundRect(-housingWidth/2 - 2, -housingHeight/2 - 2, housingWidth + 4, housingHeight + 4, 3);
+                    } else {
+                        ctx.rect(-housingWidth/2 - 2, -housingHeight/2 - 2, housingWidth + 4, housingHeight + 4);
+                    }
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+
                 ctx.restore();
             });
         }

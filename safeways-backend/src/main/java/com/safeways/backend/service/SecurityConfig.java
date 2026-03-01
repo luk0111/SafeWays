@@ -26,8 +26,8 @@ public class SecurityConfig {
 
                 // 3. Spunem care rute sunt publice și care necesită logare
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/map/**", "/v2x-stream/**").permitAll() // Lăsăm deschis pentru hartă și WebSockets
-                        .anyRequest().authenticated() // Orice altă rută necesită autentificare
+                        .requestMatchers("/api/map/**", "/api/antenna/**", "/api/ai/**", "/v2x-stream/**").permitAll()
+                        .anyRequest().authenticated()
                 );
 
         return http.build();
