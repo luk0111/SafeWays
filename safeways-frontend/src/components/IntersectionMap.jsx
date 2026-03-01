@@ -6,7 +6,7 @@ import { createV2xClient } from '../services/v2xService';
 import { updateVehicles, antennaTick, parseAiDecision, setAntennaPosition, isSimulationPaused } from '../services/antennaService';
 import { runAITrafficControl, makeLocalDecision, analyzeTrafficDensity } from '../services/aiTrafficControlService';
 
-const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = true }) => {
+const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = true, aiEnhancingEnabled = true }) => {
     const canvasRef = useRef(null);
     const rendererRef = useRef(null);
     const simulationRef = useRef(null);
@@ -15,6 +15,7 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
     const v2xClientRef = useRef(null);
     const aiControlIntervalRef = useRef(null);
     const phaseOverridesRef = useRef({});
+    const aiEnabledRef = useRef(aiEnhancingEnabled);
 
     const [mapData, setMapData] = useState(null);
     const [boundingBox, setBoundingBox] = useState({ minX: 0, maxX: 0, minY: 0, maxY: 0 });
@@ -74,6 +75,26 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
             isMounted = false;
         };
     }, []);
+
+    // Update aiEnabledRef when the prop changes
+    useEffect(() => {
+        const wasEnabled = aiEnabledRef.current;
+        aiEnabledRef.current = aiEnhancingEnabled;
+
+        // When AI is disabled, clear all phase overrides immediately
+        if (!aiEnhancingEnabled && simulationRef.current) {
+            simulationRef.current.setPhaseOverrides({});
+            phaseOverridesRef.current = {};
+            setAiStatus({ active: false, lastDecision: null });
+
+            // Log only on actual state change (not initial mount)
+            if (wasEnabled !== aiEnhancingEnabled) {
+                console.log('%c🚦 Traffic Lights: Returning to default timing', 'background: #6b7280; color: white; padding: 2px 6px; border-radius: 3px;');
+            }
+        } else if (aiEnhancingEnabled && wasEnabled !== aiEnhancingEnabled) {
+            console.log('%c🚦 Traffic Lights: AI optimization active', 'background: #a855f7; color: white; padding: 2px 6px; border-radius: 3px;');
+        }
+    }, [aiEnhancingEnabled]);
 
     useEffect(() => {
         if (canvasRef.current && !rendererRef.current) {
@@ -178,6 +199,16 @@ const IntersectionMap = ({ useBackendSimulation = false, showCollisionSpheres = 
             // AI Traffic Control - runs every 3 seconds
             let aiControlling = false;
             const runAITrafficControlLoop = async () => {
+                // Skip if AI enhancing is disabled
+                if (!aiEnabledRef.current) {
+                    if (simulationRef.current) {
+                        simulationRef.current.setPhaseOverrides({});
+                    }
+                    phaseOverridesRef.current = {};
+                    setAiStatus({ active: false, lastDecision: null });
+                    return;
+                }
+
                 if (aiControlling || !simulationRef.current) return;
                 aiControlling = true;
 

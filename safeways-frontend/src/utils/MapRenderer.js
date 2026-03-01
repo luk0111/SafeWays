@@ -1105,7 +1105,6 @@ export class MapRenderer {
             });
         }
 
-        // 5. MAȘINI & ETICHETE
         if (images.loaded) {
             const sphereRadius = 28; // Constant size regardless of zoom
 

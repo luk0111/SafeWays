@@ -14,6 +14,19 @@ function App() {
     const [aiEnhancing, setAiEnhancing] = useState(true);
     const [showCollisionSpheres, setShowCollisionSpheres] = useState(true);
 
+    // Handler for AI Traffic Enhancing toggle
+    const handleAiEnhancingToggle = () => {
+        const newValue = !aiEnhancing;
+        setAiEnhancing(newValue);
+        if (newValue) {
+            console.log('%c🤖 AI Traffic Enhancing: ENABLED', 'background: #10b981; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
+            console.log('%c   The AI assistant is now actively optimizing traffic flow.', 'color: #10b981; font-style: italic;');
+        } else {
+            console.log('%c🛑 AI Traffic Enhancing: DISABLED', 'background: #ef4444; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;');
+            console.log('%c   The AI assistant has been stopped. Traffic lights will follow default timing.', 'color: #ef4444; font-style: italic;');
+        }
+    };
+
     // --- 🌤️ WEATHER STATE ---
     const [weather, setWeather] = useState({
         temperature: '--',
@@ -190,7 +203,7 @@ function App() {
                     <div className="setting-row">
                         <span>AI Traffic Enhancing</span>
                         <label className="switch">
-                            <input type="checkbox" checked={aiEnhancing} onChange={() => setAiEnhancing(!aiEnhancing)} />
+                            <input type="checkbox" checked={aiEnhancing} onChange={handleAiEnhancingToggle} />
                             <span className="slider ai-slider"></span>
                         </label>
                     </div>
@@ -220,7 +233,7 @@ function App() {
                         </div>
                     </header>
                     <div className="map-section">
-                        <IntersectionMap showCollisionSpheres={showCollisionSpheres} />
+                        <IntersectionMap showCollisionSpheres={showCollisionSpheres} aiEnhancingEnabled={aiEnhancing} />
                     </div>
                 </div>
 
